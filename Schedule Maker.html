@@ -562,6 +562,11 @@ input:focus,select:focus{outline:none;border-color:var(--red);box-shadow:0 0 0 3
 .ai-panel-title{font-size:14px;font-weight:800;margin-bottom:10px;display:flex;align-items:center;gap:8px}
 .ai-panel-title i{color:var(--red)}
 .ai-body{font-size:13px;line-height:1.7;color:var(--ink);white-space:pre-wrap}
+.schedule-analysis-panel{
+  margin-top:16px;
+  min-height:180px;
+  background:#fffdfb;
+}
 .ai-loading{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:13px;font-style:italic}
 .dot-pulse{width:8px;height:8px;border-radius:50%;background:var(--red);animation:pulse 1.2s ease-in-out infinite}
 @keyframes pulse{0%,100%{opacity:.3;transform:scale(.8)}50%{opacity:1;transform:scale(1)}}
@@ -1830,7 +1835,18 @@ function renderOutput(slots){
   html+='</tbody></table></div><div class="export-row">';
   html+='<button class="btn btn-sm" onclick="exportScheduleExcel()"><i class="ti ti-file-spreadsheet"></i> Download Excel</button>';
   html+='<button class="btn btn-sm" onclick="exportSchedulePDF()"><i class="ti ti-file-type-pdf"></i> Download PDF</button>';
-  html+='</div></div>';
+  html+=`<button class="btn btn-sm btn-red" onclick="runAIOptimize()" id="ai-btn">
+    <i class="ti ti-chart-dots"></i> Analyze schedule
+  </button>`;
+  html+='</div>';
+
+  // Smart analysis output stays under the schedule table, not in the right sidebar.
+  html+=`<div class="ai-panel schedule-analysis-panel" id="ai-out" style="display:none">
+    <div class="ai-panel-title"><i class="ti ti-chart-dots"></i> Smart Schedule Analysis</div>
+    <div class="ai-body" id="ai-body"></div>
+  </div>`;
+
+  html+='</div>';
 
   // ── Right sidebar ──
   html+='<div>';
@@ -1871,18 +1887,7 @@ function renderOutput(slots){
     html+='<div class="status-box ok" style="margin-top:12px"><i class="ti ti-check"></i> All slots covered!</div>';
   }
 
-  // AI button
-  html+=`<button class="btn btn-red" style="width:100%;margin-top:12px;justify-content:center" onclick="runAIOptimize()" id="ai-btn">
-    <i class="ti ti-sparkles"></i> Optimize with AI
-  </button>`;
-
   html+='</div></div>';
-
-  // AI output area
-  html+=`<div class="ai-panel" id="ai-out" style="display:none">
-    <div class="ai-panel-title"><i class="ti ti-sparkles"></i> AI Schedule Analysis</div>
-    <div class="ai-body" id="ai-body"></div>
-  </div>`;
 
   document.getElementById('gen-out').innerHTML=html;
 }
@@ -2023,77 +2028,220 @@ function exportSchedulePDF(){
   win.document.close();
 }
 
-// ── AI optimization ───────────────────────────────────────
-async function runAIOptimize(){
+// ── Local smart schedule analysis ─────────────────────────
+function runAIOptimize(){
   const btn=document.getElementById('ai-btn');
   const outPanel=document.getElementById('ai-out');
   const body=document.getElementById('ai-body');
   if(!btn||!outPanel||!body) return;
 
+  if(!currentSlots.length){
+    showToast('Generate a schedule first before analyzing it.', 'warn');
+    return;
+  }
+
   btn.disabled=true;
   btn.innerHTML='<i class="ti ti-loader-2" style="animation:spin .8s linear infinite"></i> Analyzing…';
   outPanel.style.display='block';
-  body.innerHTML='<div class="ai-loading"><div class="dot-pulse"></div> Claude is analyzing your schedule…</div>';
+  body.innerHTML='<div class="ai-loading"><div class="dot-pulse"></div> Running local smart schedule analysis…</div>';
 
-  // Build schedule summary for Claude
-  const tutorSummary=tutors.map(t=>`${t.name}: ${t.assignedHrs.toFixed(1)}/${t.hrs}h assigned, mode=${t.mode}, ${Object.values(t.avail).filter(v=>v).length} available slots`).join('\n');
-  const coveredCount=tutors.reduce((s,t)=>s+(t.assignedHrs>0?1:0),0);
-  const totalHrsWanted=tutors.reduce((s,t)=>s+t.hrs,0);
-  const totalHrsAssigned=tutors.reduce((s,t)=>s+t.assignedHrs,0);
-  const gaps=[];
-  ALL_DAYS.forEach(day=>{
-    const times=day==='Friday'?TIMES_FRI:TIMES_MF;
-    times.forEach(t=>{ const s=tutors.filter(tu=>tu.avail[day+'-'+t]===true); if(!s.length) gaps.push(`${day} ${fmtTime(t)}`); });
+  const slotTimesForDay = day => day==='Friday' ? TIMES_FRI : TIMES_MF;
+  const slotLabel = s => `${s.day} ${fmtInterval(s.time)}`;
+  const availabilityCount = tutor => Object.values(tutor.avail).filter(v=>v===true).length;
+  const percentAssigned = tutor => tutor.hrs ? tutor.assignedHrs / tutor.hrs : 0;
+
+  const totalDesired=tutors.reduce((sum,t)=>sum+t.hrs,0);
+  const totalAssigned=tutors.reduce((sum,t)=>sum+t.assignedHrs,0);
+  const coveredSlots=currentSlots.filter(s=>s.assigned.length>0);
+  const uncoveredSlots=currentSlots.filter(s=>s.assigned.length===0);
+  const thinCoverage=currentSlots.filter(s=>s.assigned.length>0 && s.assigned.length<2);
+
+  const underAssigned=tutors
+    .filter(t=>t.assignedHrs < t.hrs*0.75)
+    .sort((a,b)=>(percentAssigned(a)-percentAssigned(b)) || (a.assignedHrs-b.assignedHrs));
+
+  const veryUnderAssigned=tutors
+    .filter(t=>t.assignedHrs < Math.min(2, t.hrs*0.35))
+    .sort((a,b)=>a.assignedHrs-b.assignedHrs);
+
+  const overAssigned=tutors
+    .filter(t=>t.assignedHrs > t.hrs)
+    .sort((a,b)=>b.assignedHrs-a.assignedHrs);
+
+  const lowAvailability=tutors
+    .map(t=>({t, count:availabilityCount(t)}))
+    .filter(x=>x.count<10)
+    .sort((a,b)=>a.count-b.count);
+
+  const dayStats=ALL_DAYS.map(day=>{
+    const daySlots=currentSlots.filter(s=>s.day===day);
+    const assigned=daySlots.reduce((sum,s)=>sum+s.assigned.length,0);
+    const uncovered=daySlots.filter(s=>s.assigned.length===0).length;
+    const thin=daySlots.filter(s=>s.assigned.length>0 && s.assigned.length<2).length;
+    return {day, assigned, uncovered, thin, total:daySlots.length};
   });
 
-  const prompt=`You are a scheduling assistant for Jamie Ray, ESL tutoring coordinator at Pierce College's Center for Academic Success (CAS).
+  const weakestDays=dayStats
+    .filter(d=>d.uncovered>0 || d.thin>0)
+    .sort((a,b)=>(b.uncovered-a.uncovered) || (b.thin-a.thin))
+    .slice(0,3);
 
-Here is the current auto-generated tutor schedule:
-
-TUTORS & HOURS:
-${tutorSummary}
-
-SUMMARY:
-- Total hours wanted: ${totalHrsWanted}h/week
-- Total hours assigned: ${totalHrsAssigned.toFixed(1)}h/week
-- Tutors with at least some hours: ${coveredCount}/${tutors.length}
-- Uncovered time slots (no tutor available): ${gaps.length > 0 ? gaps.join(', ') : 'None — all slots covered!'}
-
-Please:
-1. Identify which tutors are under-assigned or over-assigned relative to their desired hours, and explain why this happened.
-2. Point out the most critical uncovered time slots (if any) and suggest which tutors might be able to cover them based on typical scheduling patterns.
-3. Recommend specific adjustments to make the schedule more equitable and better covered — be concrete (e.g. "Move Payam's Thursday slot to cover the 11am gap").
-4. Flag any tutors whose hours look suspiciously low — they may have submitted incomplete availability.
-5. Give Jamie a clear action list of 3–5 next steps.
-
-Be direct, practical, and specific. Jamie is building this to use in the real world.`;
-
-  try {
-    const res=await fetch('https://api.anthropic.com/v1/messages',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({
-        model:'claude-sonnet-4-20250514',
-        max_tokens:1000,
-        messages:[{role:'user',content:prompt}]
-      })
+  // Detect long consecutive shifts per tutor/day.
+  const longRuns=[];
+  tutors.forEach(tutor=>{
+    ALL_DAYS.forEach(day=>{
+      const times=slotTimesForDay(day);
+      let runStart=null, runLen=0;
+      const flush=()=>{
+        if(runStart!==null && runLen>=7){ // 7 half-hour blocks = 3.5 hours
+          const startIndex=times.indexOf(runStart);
+          const endTime=times[startIndex+runLen] || 'end';
+          longRuns.push({tutor, day, start:runStart, end:endTime, hours:runLen*0.5});
+        }
+        runStart=null;
+        runLen=0;
+      };
+      times.forEach(time=>{
+        const slot=getSlot(day,time);
+        const assigned=slot && slot.assigned.some(x=>String(x.id)===String(tutor.id));
+        if(assigned){
+          if(runStart===null) runStart=time;
+          runLen++;
+        } else {
+          flush();
+        }
+      });
+      flush();
     });
-    const data=await res.json();
-    const text=data.content?.filter(b=>b.type==='text').map(b=>b.text).join('\n')||'No response received.';
-    body.innerHTML='';
-    // Stream-style typewriter reveal
+  });
+  longRuns.sort((a,b)=>b.hours-a.hours);
+
+  // Concrete gap suggestions: who is available for a currently uncovered slot?
+  const gapSuggestions=[];
+  uncoveredSlots.slice(0,10).forEach(slot=>{
+    const available=tutors
+      .filter(t=>t.avail[slot.day+'-'+slot.time]===true)
+      .sort((a,b)=>(percentAssigned(a)-percentAssigned(b)) || (a.assignedHrs-b.assignedHrs));
+
+    const underAvailable=available.filter(t=>t.assignedHrs<t.hrs);
+    const best=(underAvailable.length?underAvailable:available).slice(0,3);
+    gapSuggestions.push({slot, best, hasAvailable:available.length>0, onlyMaxed:available.length>0 && !underAvailable.length});
+  });
+
+  // Simple swap/move suggestions: find thin slots covered by heavily assigned tutors where an under-assigned tutor is also available.
+  const moveSuggestions=[];
+  currentSlots.forEach(slot=>{
+    if(moveSuggestions.length>=8) return;
+    if(slot.assigned.length===0) return;
+
+    const underCandidates=tutors
+      .filter(t=>t.avail[slot.day+'-'+slot.time]===true && !slot.assigned.some(a=>String(a.id)===String(t.id)) && t.assignedHrs<t.hrs*0.75)
+      .sort((a,b)=>percentAssigned(a)-percentAssigned(b));
+
+    const heavyAssigned=slot.assigned
+      .filter(t=>t.assignedHrs>=t.hrs*0.95)
+      .sort((a,b)=>b.assignedHrs-a.assignedHrs);
+
+    if(underCandidates.length && heavyAssigned.length){
+      moveSuggestions.push({slot, add:underCandidates[0], reduce:heavyAssigned[0]});
+    }
+  });
+
+  const lines=[];
+  lines.push('Smart Schedule Analysis');
+  lines.push('');
+  lines.push(`Overall: ${totalAssigned.toFixed(1)} of ${totalDesired} requested tutor-hours are scheduled.`);
+  lines.push(`Coverage: ${coveredSlots.length} covered slots, ${uncoveredSlots.length} uncovered slots, and ${thinCoverage.length} thinly covered slots with only 1 tutor.`);
+  lines.push('');
+
+  lines.push('1) Main findings');
+  if(uncoveredSlots.length===0 && thinCoverage.length===0){
+    lines.push('• Strong coverage: every open time slot has tutor coverage, and no slot is limited to only one tutor.');
+  } else {
+    if(uncoveredSlots.length) lines.push(`• ${uncoveredSlots.length} slots are completely uncovered. The first few are: ${uncoveredSlots.slice(0,6).map(slotLabel).join('; ')}${uncoveredSlots.length>6?'…':''}`);
+    if(thinCoverage.length) lines.push(`• ${thinCoverage.length} slots have only one tutor. These are worth reviewing if Jamie wants backup coverage.`);
+  }
+  if(weakestDays.length){
+    lines.push(`• Weakest day(s): ${weakestDays.map(d=>`${d.day} (${d.uncovered} uncovered, ${d.thin} thin)`).join('; ')}.`);
+  }
+  if(overAssigned.length){
+    lines.push(`• Over-assigned tutor(s): ${overAssigned.map(t=>`${t.name} ${t.assignedHrs.toFixed(1)}/${t.hrs}h`).join('; ')}.`);
+  } else {
+    lines.push('• No tutor is over their requested weekly hours.');
+  }
+  lines.push('');
+
+  lines.push('2) Tutor balance');
+  if(underAssigned.length){
+    underAssigned.slice(0,8).forEach(t=>{
+      lines.push(`• ${t.name}: ${t.assignedHrs.toFixed(1)}/${t.hrs}h assigned (${Math.round(percentAssigned(t)*100)}%). Availability slots marked: ${availabilityCount(t)}.`);
+    });
+  } else {
+    lines.push('• Tutor hours look balanced. Everyone is assigned at least about 75% of their requested hours.');
+  }
+  if(veryUnderAssigned.length){
+    lines.push(`• Possible incomplete availability: ${veryUnderAssigned.map(t=>t.name).join(', ')}. These tutors received very low hours and may need to submit more available times.`);
+  }
+  if(lowAvailability.length){
+    lines.push(`• Low availability forms to double-check: ${lowAvailability.slice(0,6).map(x=>`${x.t.name} (${x.count} slots)`).join('; ')}.`);
+  }
+  lines.push('');
+
+  lines.push('3) Coverage suggestions');
+  if(gapSuggestions.length){
+    gapSuggestions.forEach(g=>{
+      if(!g.hasAvailable){
+        lines.push(`• ${slotLabel(g.slot)}: no tutor marked available. Jamie may need to ask tutors for more availability at this time.`);
+      } else if(g.onlyMaxed){
+        lines.push(`• ${slotLabel(g.slot)}: available tutor(s) exist but are already at/near requested hours. Possible backup: ${g.best.map(t=>t.name).join(', ')}.`);
+      } else {
+        lines.push(`• ${slotLabel(g.slot)}: possible fit(s): ${g.best.map(t=>`${t.name} (${t.assignedHrs.toFixed(1)}/${t.hrs}h)`).join(', ')}.`);
+      }
+    });
+  } else {
+    lines.push('• No uncovered slots. Use the thin coverage list only if Jamie wants stronger backup coverage.');
+  }
+  lines.push('');
+
+  lines.push('4) Workload comfort check');
+  if(longRuns.length){
+    longRuns.slice(0,6).forEach(r=>{
+      lines.push(`• ${r.tutor.name} has a long continuous block on ${r.day}: ${fmtTime(r.start)}–${r.end==='end'?'end':fmtTime(r.end)} (${r.hours.toFixed(1)}h). Consider a break or split if needed.`);
+    });
+  } else {
+    lines.push('• No very long continuous shifts detected.');
+  }
+  lines.push('');
+
+  lines.push('5) Suggested next steps for Jamie');
+  const nextSteps=[];
+  if(uncoveredSlots.length) nextSteps.push('Review uncovered slots first, especially the ones with no available tutors marked.');
+  if(underAssigned.length) nextSteps.push('Ask the most under-assigned tutors if they can add more availability or take backup shifts.');
+  if(moveSuggestions.length){
+    const m=moveSuggestions[0];
+    nextSteps.push(`Try one balancing move: consider using ${m.add.name} at ${slotLabel(m.slot)} instead of relying heavily on ${m.reduce.name}.`);
+  }
+  if(longRuns.length) nextSteps.push('Check long continuous shifts and decide whether those tutors need a break.');
+  nextSteps.push('After manual edits, click Analyze schedule again to re-check balance and coverage.');
+  nextSteps.slice(0,5).forEach((step,i)=>lines.push(`${i+1}. ${step}`));
+
+  const report=lines.join('\n');
+
+  setTimeout(()=>{
+    body.textContent='';
     let i=0;
     const interval=setInterval(()=>{
-      body.textContent=text.slice(0,i);
-      i+=6;
-      if(i>=text.length){body.textContent=text;clearInterval(interval);}
-    },12);
-  } catch(err){
-    body.innerHTML=`<span style="color:var(--red)">Could not reach the AI — check your connection and try again. (${err.message})</span>`;
-  } finally {
+      body.textContent=report.slice(0,i);
+      i+=18;
+      if(i>=report.length){
+        body.textContent=report;
+        clearInterval(interval);
+      }
+    },8);
+
     btn.disabled=false;
-    btn.innerHTML='<i class="ti ti-sparkles"></i> Re-analyze with AI';
-  }
+    btn.innerHTML='<i class="ti ti-chart-dots"></i> Re-analyze schedule';
+  },250);
 }
 
 // ── Spin keyframe for loader ─────────────────────────────
