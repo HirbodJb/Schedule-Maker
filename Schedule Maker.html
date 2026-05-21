@@ -646,13 +646,15 @@ input:focus,select:focus{outline:none;border-color:var(--red);box-shadow:0 0 0 3
 /* ── Subtle credit footer + scroll-to-top ──────────────── */
 .made-by{
   text-align:center;
-  padding:14px 18px 18px;
-  border-top:1px solid var(--line);
-  color:var(--muted);
-  font-size:11px;
+  margin-top:40px;
+  padding:22px 0 26px;
+  color:#a79b96;
+  font-size:10px;
   font-weight:600;
-  letter-spacing:.01em;
-  background:#fffaf7;
+  letter-spacing:.04em;
+  background:transparent;
+  border:none;
+  opacity:.75;
 }
 
 .scroll-top-btn{
@@ -916,10 +918,9 @@ function showConfirm(title, msg, onConfirm, confirmLabel='Delete', confirmClass=
 
     <div id="gen-out"></div>
   </div>
-
-  <div class="made-by">Made by Hirbod Jabbarnezhad</div>
-
 </div><!-- /shell -->
+
+<div class="made-by">Made by Hirbod Jabbarnezhad</div>
 
 
 <button class="scroll-top-btn" id="scroll-top-btn" onclick="scrollActivePaneToTop()" title="Back to top" aria-label="Back to top">
