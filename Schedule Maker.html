@@ -992,6 +992,13 @@ function showConfirm(title, msg, onConfirm, confirmLabel='Delete', confirmClass=
       <button class="btn" onclick="switchPane('tutors')">
         <i class="ti ti-users"></i> Back to roster
       </button>
+      <button class="btn" onclick="saveProject()" title="Save this roster and schedule as a project file">
+        <i class="ti ti-device-floppy"></i> Save Project
+      </button>
+      <button class="btn" onclick="document.getElementById('project-load-file').click()" title="Load a previously saved project file">
+        <i class="ti ti-folder-open"></i> Load Project
+      </button>
+      <input type="file" id="project-load-file" accept=".json,application/json" style="display:none" onchange="handleProjectFile(this)">
       <button class="btn" onclick="undoLastAction()" id="schedule-undo-btn" style="display:none">
         <i class="ti ti-arrow-back-up"></i> Undo
       </button>
@@ -1233,6 +1240,89 @@ function clearUndoState(){
   undoLabel='';
   undoMeta=null;
   updateUndoButton();
+}
+
+
+function saveProject(){
+  if(!tutors.length){
+    showToast('Add or import tutors before saving a project.', 'warn');
+    return;
+  }
+
+  const snapshot = buildAppSnapshot();
+  snapshot.activePane = currentSlots.length ? 'generate' : getActivePaneName();
+
+  const payload = {
+    app:'CAS ESL Schedule Builder',
+    type:'cas-esl-scheduler-project',
+    version:1,
+    savedAt:new Date().toISOString(),
+    snapshot
+  };
+
+  const safeDate = new Date().toISOString().slice(0,19).replace(/[:T]/g,'-');
+  const blob = new Blob([JSON.stringify(payload,null,2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `cas-esl-schedule-project-${safeDate}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  showToast('Project saved as a JSON file. Keep this file to continue editing later.', 'ok', 3200);
+}
+
+function handleProjectFile(input){
+  const file = input && input.files ? input.files[0] : null;
+  if(!file) return;
+
+  const reader = new FileReader();
+  reader.onload = e => {
+    try{
+      const payload = JSON.parse(e.target.result);
+      const snapshot = payload && payload.snapshot ? payload.snapshot : payload;
+
+      if(!snapshot || !Array.isArray(snapshot.tutors)){
+        throw new Error('Invalid project file');
+      }
+
+      const doLoad = () => {
+        if(tutors.length || currentSlots.length){
+          saveUndoState('loaded project');
+        }
+
+        // Saved project files should reopen directly on the Schedule page when a schedule exists.
+        snapshot.activePane = (snapshot.slots && snapshot.slots.length) ? 'generate' : 'tutors';
+        restoreAppSnapshot(snapshot);
+        resetRosterSearchResults();
+        resetScheduleSearchResults();
+        closeShiftPopover();
+        showToast(`Loaded project: ${snapshot.tutors.length} tutor${snapshot.tutors.length===1?'':'s'}${snapshot.slots&&snapshot.slots.length?' with a saved schedule':''}.`, 'ok', 3400);
+      };
+
+      if(tutors.length || currentSlots.length){
+        showConfirm(
+          'Load saved project?',
+          'Loading this project will replace the current roster and schedule. You can use the Undo button to return to the previous version right after loading.',
+          doLoad,
+          'Load project',
+          'btn-red'
+        );
+      } else {
+        doLoad();
+      }
+    } catch(err){
+      showToast('This does not look like a valid saved schedule project file.', 'err');
+    } finally {
+      input.value='';
+    }
+  };
+  reader.onerror = () => {
+    showToast('Could not read the selected project file.', 'err');
+    input.value='';
+  };
+  reader.readAsText(file);
 }
 
 function undoLastAction(){
