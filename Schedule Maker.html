@@ -709,6 +709,43 @@ input:focus,select:focus{outline:none;border-color:var(--red);box-shadow:0 0 0 3
   opacity:.75;
 }
 
+
+.undo-float-btn{
+  position:fixed;
+  left:30px;
+  bottom:30px;
+  z-index:9997;
+  border:1px solid var(--line-s);
+  background:#fff;
+  color:var(--ink);
+  border-radius:999px;
+  padding:10px 16px;
+  display:none;
+  align-items:center;
+  gap:7px;
+  cursor:pointer;
+  box-shadow:0 10px 28px rgba(30,22,20,.16);
+  font-size:13px;
+  font-weight:800;
+  font-family:var(--font);
+  transition:transform .14s ease,background .14s ease,color .14s ease,box-shadow .14s ease;
+}
+
+.undo-float-btn.show{
+  display:flex;
+}
+
+.undo-float-btn:hover{
+  background:var(--ink);
+  color:#fff;
+  transform:translateY(-3px);
+  box-shadow:0 14px 34px rgba(30,22,20,.24);
+}
+
+.undo-float-btn i{
+  font-size:18px;
+}
+
 .scroll-top-btn{
   position:fixed;
   right:30px;
@@ -955,6 +992,9 @@ function showConfirm(title, msg, onConfirm, confirmLabel='Delete', confirmClass=
       <button class="btn" onclick="switchPane('tutors')">
         <i class="ti ti-users"></i> Back to roster
       </button>
+      <button class="btn" onclick="undoLastAction()" id="schedule-undo-btn" style="display:none">
+        <i class="ti ti-arrow-back-up"></i> Undo
+      </button>
       <div class="schedule-search" id="schedule-search-wrap">
         <i class="ti ti-search"></i>
         <input id="schedule-search-input" type="search" placeholder="Search first or last name…" oninput="handleScheduleSearchInput()" onkeydown="if(event.key==='Enter') searchScheduleName()">
@@ -974,6 +1014,10 @@ function showConfirm(title, msg, onConfirm, confirmLabel='Delete', confirmClass=
 
 <div class="made-by">Made by Hirbod Jabbarnezhad</div>
 
+
+<button class="undo-float-btn" id="undo-btn" onclick="undoLastAction()" title="Undo last action" aria-label="Undo last action">
+  <i class="ti ti-arrow-back-up"></i> <span id="undo-btn-label">Undo</span>
+</button>
 
 <button class="scroll-top-btn" id="scroll-top-btn" onclick="scrollActivePaneToTop()" title="Back to top" aria-label="Back to top">
   <i class="ti ti-arrow-up"></i>
@@ -1016,6 +1060,9 @@ let scheduleSearchQuery = '';
 let currentAnalysisReportText = '';
 let currentAnalysisReportHTML = '';
 let analysisPanelOpen = false;
+let undoSnapshot = null;
+let undoLabel = '';
+let undoMeta = null;
 
 // ── Availability table ───────────────────────────────────
 function buildAvailTable(){
@@ -1072,6 +1119,154 @@ function durationText(hours){
   if(h && m) return `${h}:${String(m).padStart(2,'0')}`;
   if(h) return `${h}:00`;
   return `0:${String(m).padStart(2,'0')}`;
+}
+
+
+function getActivePaneName(){
+  const active=document.querySelector('.pane.act');
+  return active ? active.id.replace('pane-','') : 'upload';
+}
+
+function buildAppSnapshot(){
+  return {
+    tutors:tutors.map(t=>({
+      ...t,
+      avail:{...t.avail},
+      assignments:t.assignments ? t.assignments.map(a=>({day:a.day,time:a.time})) : []
+    })),
+    slots:currentSlots.map(s=>({
+      day:s.day,
+      time:s.time,
+      assignedIds:s.assigned.map(t=>t.id)
+    })),
+    selectedShift:selectedShift ? {...selectedShift} : null,
+    moveMode:moveMode ? {...moveMode} : null,
+    showAllGaps,
+    focusedTutorId,
+    currentAnalysisReportText,
+    currentAnalysisReportHTML,
+    analysisPanelOpen,
+    activePane:getActivePaneName()
+  };
+}
+
+function restoreAppSnapshot(snapshot){
+  if(!snapshot) return;
+
+  tutors=snapshot.tutors.map(t=>({
+    ...t,
+    avail:{...t.avail},
+    assignedHrs:0,
+    assignments:[]
+  }));
+
+  const tutorById=new Map(tutors.map(t=>[String(t.id),t]));
+  currentSlots=(snapshot.slots||[]).map(s=>({
+    day:s.day,
+    time:s.time,
+    assigned:(s.assignedIds||[]).map(id=>tutorById.get(String(id))).filter(Boolean)
+  }));
+
+  tutors.forEach(t=>{ t.assignments=[]; t.assignedHrs=0; });
+  currentSlots.forEach(slot=>{
+    slot.assigned.forEach(t=>{
+      t.assignments.push(slot);
+      t.assignedHrs=(t.assignedHrs||0)+0.5;
+    });
+  });
+
+  // When restoring an undo snapshot, always return to normal table view.
+  // This prevents old move-mode banners/cancel buttons from coming back after confirming Undo.
+  selectedShift=null;
+  moveMode=null;
+  showAllGaps=!!snapshot.showAllGaps;
+  focusedTutorId=snapshot.focusedTutorId;
+  currentAnalysisReportText=snapshot.currentAnalysisReportText||'';
+  currentAnalysisReportHTML=snapshot.currentAnalysisReportHTML||'';
+  analysisPanelOpen=!!snapshot.analysisPanelOpen;
+
+  closeShiftPopover();
+  renderTutors();
+  if(currentSlots.length){
+    renderOutput(currentSlots);
+    updateScheduleStats();
+  } else {
+    const genOut=document.getElementById('gen-out');
+    if(genOut) genOut.innerHTML='';
+    document.getElementById('st-slots').textContent='—';
+    document.getElementById('st-gaps').textContent='—';
+    document.getElementById('st-hrs').textContent=tutors.reduce((s,t)=>s+t.hrs,0);
+    document.getElementById('st-tutors').textContent=tutors.length;
+  }
+
+  switchPane(snapshot.activePane||'generate');
+}
+
+function updateUndoButton(){
+  const btn=document.getElementById('undo-btn');
+  const label=document.getElementById('undo-btn-label');
+  const scheduleBtn=document.getElementById('schedule-undo-btn');
+  if(btn&&label){
+    if(undoSnapshot){
+      label.textContent=undoLabel ? `Undo ${undoLabel}` : 'Undo';
+      btn.classList.add('show');
+    } else {
+      label.textContent='Undo';
+      btn.classList.remove('show');
+    }
+  }
+  if(scheduleBtn){
+    scheduleBtn.style.display=undoSnapshot ? 'inline-flex' : 'none';
+    scheduleBtn.innerHTML=`<i class="ti ti-arrow-back-up"></i> ${undoSnapshot&&undoLabel ? 'Undo '+escapeHtml(undoLabel) : 'Undo'}`;
+  }
+}
+
+function saveUndoState(label, meta=null){
+  undoSnapshot=buildAppSnapshot();
+  undoLabel=label||'last action';
+  undoMeta=meta;
+  updateUndoButton();
+}
+
+function clearUndoState(){
+  undoSnapshot=null;
+  undoLabel='';
+  undoMeta=null;
+  updateUndoButton();
+}
+
+function undoLastAction(){
+  if(!undoSnapshot){
+    showToast('There is nothing to undo yet.', 'warn');
+    return;
+  }
+
+  const snapshot=undoSnapshot;
+  const label=undoLabel;
+  const meta=undoMeta;
+
+  const runUndo = () => {
+    clearUndoState();
+    restoreAppSnapshot(snapshot);
+    if(meta && meta.type==='move'){
+      showToast(`Moved ${escapeHtml(meta.tutorName)} back to ${escapeHtml(meta.fromDay)} ${escapeHtml(fmtInterval(meta.fromTime))}.`, 'ok', 3000);
+    } else {
+      showToast(`Undid ${escapeHtml(label)}.`, 'ok', 2600);
+    }
+  };
+
+  if(meta && meta.type==='move'){
+    showConfirm(
+      'Move tutor back?',
+      `This will move <strong>${escapeHtml(meta.tutorName)}</strong> back to the previous position: <strong>${escapeHtml(meta.fromDay)} ${escapeHtml(fmtInterval(meta.fromTime))}</strong>.`,
+      runUndo,
+      'Confirm undo',
+      'btn-red'
+    );
+    return;
+  }
+
+  runUndo();
 }
 
 function getRunForTutor(tutor,day,time){
@@ -1152,8 +1347,9 @@ function deleteSelectedShift(){
   if(!tutor||!slot) return;
   showConfirm(
     'Delete shift?',
-    `Remove <strong>${tutor.name}</strong>'s shift on <strong>${day} ${fmtInterval(time)}</strong>? This can't be undone.`,
+    `You are deleting <strong>${tutor.name}</strong>'s shift on <strong>${day} ${fmtInterval(time)}</strong>. This can be undone with the Undo button.`,
     ()=>{
+      saveUndoState('deleted shift');
       slot.assigned=slot.assigned.filter(t=>String(t.id)!==String(tutorId));
       tutor.assignments=tutor.assignments.filter(a=>!(a.day===day && a.time===time));
       tutor.assignedHrs=Math.max(0,tutor.assignedHrs-0.5);
@@ -1203,6 +1399,7 @@ function handleScheduleCellClick(day,time){
   if(to.assigned.some(t=>String(t.id)===String(tutor.id))){ showToast(`${tutor.name} is already assigned in that slot.`, 'warn'); return; }
 
   const doMove = () => {
+    saveUndoState('moved shift', {type:'move', tutorName:tutor.name, fromDay:moveMode.day, fromTime:moveMode.time, toDay:day, toTime:time});
     from.assigned=from.assigned.filter(t=>String(t.id)!==String(tutor.id));
     to.assigned.push(tutor);
     tutor.assignments=tutor.assignments.filter(a=>!(a.day===moveMode.day && a.time===moveMode.time));
@@ -1593,6 +1790,7 @@ function clearAll(){
     'Clear everything?',
     'This will delete all tutors and the current schedule. This cannot be undone.',
     ()=>{
+      saveUndoState('clear all');
       tutors=[]; currentSlots=[]; selectedShift=null; moveMode=null; focusedTutorId=null; showAllGaps=false; currentAnalysisReportText=''; currentAnalysisReportHTML=''; analysisPanelOpen=false; resetRosterSearchResults(); resetScheduleSearchResults();
       closeShiftPopover();
       document.getElementById('gen-out').innerHTML='';
@@ -1618,6 +1816,7 @@ function switchPane(name){
   document.getElementById('pane-'+name).classList.add('act');
   document.getElementById('nb-'+name).classList.add('act');
   updateScrollTopButton(name);
+  updateUndoButton();
   window.scrollTo({top:0, behavior:'smooth'});
   if(name==='generate'){
     document.getElementById('st-tutors').textContent = tutors.length;
@@ -1736,6 +1935,9 @@ DZ.addEventListener('drop', e=>{
 
 // ── Schedule generation ───────────────────────────────────
 function generateSchedule(){
+  if(currentSlots.length || tutors.some(t=>t.assignedHrs>0 || (t.assignments&&t.assignments.length)) || currentAnalysisReportText){
+    saveUndoState('regenerated schedule');
+  }
   currentAnalysisReportText=''; currentAnalysisReportHTML=''; analysisPanelOpen=false;
   if(!tutors.length){
     document.getElementById('gen-out').innerHTML='<div class="empty">Add tutors first — import a CSV or add them manually in the Roster tab.</div>';
@@ -1947,6 +2149,7 @@ function renderOutput(slots){
   html+='</div></div>';
 
   document.getElementById('gen-out').innerHTML=html;
+  updateUndoButton();
 }
 
 
@@ -2395,6 +2598,7 @@ function formatPhone(input){
 buildAvailTable();
 renderTutors();
 updateScrollTopButton('upload');
+updateUndoButton();
 </script>
 </body>
 </html>
