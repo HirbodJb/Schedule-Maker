@@ -99,6 +99,57 @@ textarea:focus{outline:none;border-color:var(--red);box-shadow:0 0 0 3px rgba(17
   font-size:16px;
   font-weight:900;
 }
+
+
+/* ── Schedule page search ─────────────────────────────── */
+.schedule-search{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  background:#fff;
+  border:1px solid var(--line-s);
+  border-radius:999px;
+  padding:5px 6px 5px 12px;
+  min-width:320px;
+  max-width:380px;
+  flex:1;
+  box-shadow:0 4px 16px rgba(30,22,20,.04);
+  transition:border-color .14s,box-shadow .14s;
+  margin-left:auto;
+}
+.schedule-search:focus-within{border-color:var(--red);box-shadow:0 0 0 3px rgba(176,58,46,.1)}
+.schedule-search i{color:var(--muted);font-size:15px;flex-shrink:0}
+.schedule-search input{border:none;background:transparent;padding:5px 2px;font-size:12px;box-shadow:none;min-width:0}
+.schedule-search input:focus{border:none;box-shadow:none;outline:none}
+.schedule-search button{
+  border:none;
+  background:var(--red);
+  color:#fff;
+  border-radius:999px;
+  width:32px;
+  height:32px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  cursor:pointer;
+  transition:background .12s,transform .12s;
+  flex-shrink:0;
+}
+.schedule-search button:hover{background:var(--red-d);transform:translateY(-1px) scale(1.04)}
+.schedule-search button i{color:#fff;font-size:16px;font-weight:900}
+.h-row.schedule-search-hit{
+  border-color:#ffb800!important;
+  background:#fff8d9!important;
+  box-shadow:0 0 0 3px rgba(255,184,0,.28),0 12px 34px rgba(255,184,0,.22)!important;
+  animation:searchPulse 1.25s ease-in-out 2;
+}
+.h-row.schedule-search-hit:hover{
+  background:var(--cream)!important;
+  border-color:transparent!important;
+  box-shadow:none!important;
+  animation:none!important;
+}
+
 .tc.search-hit{
   border-color:#ffb800!important;
   background:#fff8d9!important;
@@ -451,6 +502,34 @@ input:focus,select:focus{outline:none;border-color:var(--red);box-shadow:0 0 0 3
 .h-bar.over{background:#e24b4a}.h-bar.low{background:#ef9f27}
 .h-num{font-size:11px;color:var(--muted);white-space:nowrap;font-weight:700;min-width:56px;text-align:right}
 
+
+
+/* ── Tutor focus mode from hours summary ─────────────── */
+.focus-help{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  background:#fff8ec;
+  border:1px solid var(--warn-b);
+  color:var(--warn);
+  border-radius:12px;
+  padding:10px 12px;
+  margin-bottom:12px;
+  font-size:12px;
+  font-weight:800;
+}
+.focus-help .btn{margin-left:auto;background:#fff}
+.h-row{cursor:pointer;border-radius:11px;padding-left:6px;padding-right:6px;transition:background .14s,opacity .14s,transform .14s,box-shadow .14s}
+.h-row:hover{background:var(--cream);transform:translateY(-1px)}
+.h-row.focus-active{background:#fff8ec;border:1px solid var(--warn-b);box-shadow:0 6px 18px rgba(122,80,0,.10)}
+.h-row.focus-muted{opacity:.45;filter:grayscale(.25)}
+.focus-mode .sched-table td.focus-other{background:#f1efed!important;color:#aaa;filter:grayscale(1);opacity:.48}
+.focus-mode .sched-table td.focus-match-cell{background:#fffaf0!important;box-shadow:inset 0 0 0 2px rgba(239,159,39,.55)}
+.focus-mode .pill.focus-nonmatch,
+.focus-mode .pill-merged.focus-nonmatch{opacity:.18!important;filter:grayscale(1);box-shadow:none!important}
+.focus-mode .pill.focus-match,
+.focus-mode .pill-merged.focus-match{position:relative;z-index:12;outline:2px solid #ef9f27;box-shadow:0 0 0 3px rgba(239,159,39,.20),0 8px 22px rgba(239,159,39,.24)}
+
 /* ── AI output ───────────────────────────  */
 .ai-panel{background:#fff;border:1px solid var(--line);border-radius:16px;padding:20px;margin-top:14px}
 .ai-panel-title{font-size:14px;font-weight:800;margin-bottom:10px;display:flex;align-items:center;gap:8px}
@@ -781,7 +860,12 @@ function showConfirm(title, msg, onConfirm, confirmLabel='Delete', confirmClass=
       <button class="btn" onclick="switchPane('tutors')">
         <i class="ti ti-users"></i> Back to roster
       </button>
-      <button class="btn btn-danger" onclick="clearAll()" style="margin-left:auto">
+      <div class="schedule-search" id="schedule-search-wrap">
+        <i class="ti ti-search"></i>
+        <input id="schedule-search-input" type="search" placeholder="Search first or last name…" onkeydown="if(event.key==='Enter') searchScheduleName()">
+        <button type="button" onclick="searchScheduleName()" title="Search schedule" aria-label="Search schedule"><i class="ti ti-arrow-right"></i></button>
+      </div>
+      <button class="btn btn-danger" onclick="clearAll()">
         <i class="ti ti-trash"></i> Clear &amp; start over
       </button>
     </div>
@@ -825,6 +909,7 @@ let currentSlots = [];
 let selectedShift = null;
 let moveMode = null;
 let showAllGaps = false;
+let focusedTutorId = null;
 
 // ── Availability table ───────────────────────────────────
 function buildAvailTable(){
@@ -988,6 +1073,19 @@ function cancelMoveMode(){
   renderOutput(currentSlots);
 }
 
+function focusTutor(tutorId){
+  focusedTutorId = String(tutorId);
+  closeShiftPopover();
+  renderOutput(currentSlots);
+  const tutor = getTutorById(tutorId);
+  if(tutor) showToast(`Focusing on ${escapeHtml(tutor.name)}'s schedule.`, 'ok', 2200);
+}
+
+function clearTutorFocus(){
+  focusedTutorId = null;
+  renderOutput(currentSlots);
+}
+
 function handleScheduleCellClick(day,time){
   if(!moveMode) return;
   const tutor=getTutorById(moveMode.tutorId);
@@ -1080,6 +1178,57 @@ function renderTutors(){
 
 function clearRosterSearchHighlights(){
   document.querySelectorAll('.tc.search-hit').forEach(card=>card.classList.remove('search-hit'));
+}
+
+function clearScheduleSearchHighlights(){
+  document.querySelectorAll('.h-row.schedule-search-hit').forEach(row=>row.classList.remove('schedule-search-hit'));
+}
+
+function searchScheduleName(){
+  const input = document.getElementById('schedule-search-input');
+  if(!input) return;
+  const raw = input.value.trim();
+  clearScheduleSearchHighlights();
+
+  if(!raw){
+    showToast('Type a first name or last name to search the schedule.', 'warn');
+    input.focus();
+    return;
+  }
+
+  const q = raw.toLowerCase();
+  const found = tutors.find(t=>{
+    const parts = t.name.toLowerCase().split(/\s+/).filter(Boolean);
+    const first = parts[0] || '';
+    const last = parts.length > 1 ? parts[parts.length - 1] : '';
+    return first.includes(q) || last.includes(q);
+  });
+
+  if(!found){
+    showToast(`No tutor found for <strong>${escapeHtml(raw)}</strong>. Search by first name or last name only.`, 'warn');
+    return;
+  }
+
+  // Make sure the schedule results exist before scrolling to the Hours Summary row.
+  if(!currentSlots.length){
+    showToast('Generate a schedule first, then search for a name in the schedule.', 'warn');
+    return;
+  }
+
+  const row = document.getElementById(`hours-row-${found.id}`);
+  if(!row){
+    showToast(`Found ${escapeHtml(found.name)}, but the schedule summary is not visible yet.`, 'warn');
+    return;
+  }
+
+  row.classList.add('schedule-search-hit');
+  const clearHighlight = () => {
+    row.classList.remove('schedule-search-hit');
+    row.removeEventListener('mouseenter', clearHighlight);
+  };
+  row.addEventListener('mouseenter', clearHighlight, { once:true });
+  row.scrollIntoView({behavior:'smooth', block:'center'});
+  showToast(`Found ${escapeHtml(found.name)}.`, 'ok', 2200);
 }
 
 function searchRoster(){
@@ -1231,7 +1380,7 @@ function clearAll(){
     'Clear everything?',
     'This will delete all tutors and the current schedule. This cannot be undone.',
     ()=>{
-      tutors=[]; currentSlots=[]; selectedShift=null; moveMode=null; showAllGaps=false;
+      tutors=[]; currentSlots=[]; selectedShift=null; moveMode=null; focusedTutorId=null; showAllGaps=false;
       closeShiftPopover();
       document.getElementById('gen-out').innerHTML='';
       document.getElementById('st-tutors').textContent='0';
@@ -1451,10 +1600,18 @@ function renderOutput(slots){
     const mt=getTutorById(moveMode.tutorId);
     html+=`<div class="move-help"><i class="ti ti-arrows-move"></i> Move mode: choose a valid destination cell for ${mt?escapeHtml(mt.name):'this tutor'}, or <button class="btn btn-sm" onclick="cancelMoveMode()" style="margin-left:auto">Cancel</button></div>`;
   }
+  if(focusedTutorId){
+    const ft=getTutorById(focusedTutorId);
+    if(ft){
+      html+=`<div class="focus-help"><i class="ti ti-user-search"></i> Focus mode: showing ${escapeHtml(ft.name)}'s schedule. Everyone else is greyed out. <button class="btn btn-sm" onclick="clearTutorFocus()"><i class="ti ti-x"></i> Exit focus</button></div>`;
+    } else {
+      focusedTutorId=null;
+    }
+  }
   html+='<div class="split">';
 
   // ── Left: grid ──
-  html+='<div class="panel"><div class="panel-title">Weekly schedule grid</div><div class="sched-wrap"><table class="sched-table">';
+  html+=`<div class="panel ${focusedTutorId?'focus-mode':''}"><div class="panel-title">Weekly schedule grid</div><div class="sched-wrap"><table class="sched-table">`;
   html+='<thead><tr><th style="width:92px">Time</th>';
   ALL_DAYS.forEach(d=>html+=`<th>${d}</th>`);
   html+='</tr></thead><tbody>';
@@ -1476,6 +1633,10 @@ function renderOutput(slots){
         const duplicate=assignedHere.some(x=>String(x.id)===String(movingTutor.id));
         cellClass=(available&&!duplicate&&!sameCell)?'drop-ok':'drop-no';
       }
+      if(focusedTutorId && !moveMode){
+        const hasFocused=assignedHere.some(x=>String(x.id)===String(focusedTutorId));
+        cellClass=(cellClass+' '+(hasFocused?'focus-match-cell':'focus-other')).trim();
+      }
 
       if(!assignedHere.length){html+=`<td class="${cellClass}" onclick="handleScheduleCellClick('${day}','${t}')"></td>`;return;}
 
@@ -1494,12 +1655,14 @@ function renderOutput(slots){
         } else if(isMerged&&!info.isStart){
           // continuation row — show a faint continuation indicator, not a full pill
           const editClass=moveMode&&String(moveMode.tutorId)===String(tt.id)&&moveMode.day===day&&moveMode.time===t?' move-source':'';
-          pills+=`<span class="pill${editClass}" onclick="openShiftPopover(event,${tt.id},'${day}','${t}')" style="background:${c.bg};color:${c.text};border:1px dashed ${c.border};opacity:.72;font-size:9px;">${tt.name.split(' ')[0]} ···</span>`;
+          const focusClass=focusedTutorId?(String(focusedTutorId)===String(tt.id)?' focus-match':' focus-nonmatch'):'';
+          pills+=`<span class="pill${editClass}${focusClass}" onclick="openShiftPopover(event,${tt.id},'${day}','${t}')" style="background:${c.bg};color:${c.text};border:1px dashed ${c.border};opacity:.72;font-size:9px;">${tt.name.split(' ')[0]} ···</span>`;
           return;
         }
 
         const editClass=moveMode&&String(moveMode.tutorId)===String(tt.id)&&moveMode.day===day&&moveMode.time===t?' move-source':'';
-        pills+=`<span class="${pillClass}${editClass}" onclick="openShiftPopover(event,${tt.id},'${day}','${t}')" style="background:${c.bg};color:${c.text};border:1.5px solid ${c.border}">${tt.name.split(' ')[0]} ${mode}${timeLabel}</span>`;
+        const focusClass=focusedTutorId?(String(focusedTutorId)===String(tt.id)?' focus-match':' focus-nonmatch'):'';
+        pills+=`<span class="${pillClass}${editClass}${focusClass}" onclick="openShiftPopover(event,${tt.id},'${day}','${t}')" style="background:${c.bg};color:${c.text};border:1.5px solid ${c.border}">${tt.name.split(' ')[0]} ${mode}${timeLabel}</span>`;
       });
 
       html+=`<td class="${cellClass}" onclick="handleScheduleCellClick('${day}','${t}')">${pills}</td>`;
@@ -1515,12 +1678,13 @@ function renderOutput(slots){
   html+='<div>';
 
   // Hours summary
-  html+='<div class="panel"><div class="panel-title">Hours summary</div>';
+  html+='<div class="panel"><div class="panel-title">Hours summary</div><div style="font-size:11px;color:var(--muted);font-weight:600;margin:-6px 0 8px">Click a name to focus their schedule.</div>';
   tutors.forEach((t,i)=>{
     const c=colorFor(i);
     const pct=Math.min(100,Math.round(t.assignedHrs/t.hrs*100));
     const cls=t.assignedHrs>t.hrs?'over':t.assignedHrs<t.hrs*0.5?'low':'';
-    html+=`<div class="h-row">
+    const focusRowClass=focusedTutorId?(String(focusedTutorId)===String(t.id)?' focus-active':' focus-muted'):'';
+    html+=`<div class="h-row${focusRowClass}" id="hours-row-${t.id}" onclick="focusTutor(${t.id})" title="Focus ${escapeHtml(t.name)}'s schedule">
       <div class="h-av" style="background:${c.bg};color:${c.text}">${initials(t.name)}</div>
       <div style="flex:1">
         <div class="h-name">${t.name}</div>
@@ -1529,6 +1693,7 @@ function renderOutput(slots){
       <div class="h-num">${t.assignedHrs.toFixed(1)} / ${t.hrs}h</div>
     </div>`;
   });
+  if(focusedTutorId){ html+='<button class="btn btn-sm" onclick="clearTutorFocus()" style="width:100%;justify-content:center;margin-top:10px"><i class="ti ti-x"></i> Exit focus mode</button>'; }
   html+='</div>';
 
   // Gaps
