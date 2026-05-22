@@ -6,12 +6,17 @@ Copyright (c) 2026 Hirbod Jabbarnezhad.
 Use, copying, and modification are allowed only with attribution.
 See LICENSE.txt for full terms.
 -->
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="application-name" content="CAS ESL Schedule Builder">
+<meta name="author" content="Hirbod Jabbarnezhad">
+<meta name="creator" content="Hirbod Jabbarnezhad">
+<meta name="copyright" content="Copyright (c) 2026 Hirbod Jabbarnezhad">
+<meta name="description" content="CAS ESL Schedule Builder, originally designed and developed by Hirbod Jabbarnezhad.">
+
 <title>CAS ESL Scheduler — Pierce College</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,500;0,9..40,700;0,9..40,800;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -627,6 +632,16 @@ input:focus,select:focus{outline:none;border-color:var(--red);box-shadow:0 0 0 3
   .ai-panel-actions{justify-content:flex-start}
 }
 
+
+.sched-table td.uncovered-cell{
+  background:#fff0f0 !important;
+  box-shadow:inset 0 0 0 1px rgba(176,58,46,.18);
+}
+
+.sched-table td.uncovered-cell:hover{
+  background:#ffe3e3 !important;
+}
+
 /* ── Gap list ────────────────────────────  */
 .gap-item{background:var(--red-l);border:1px solid var(--red-b);border-radius:10px;padding:8px 12px;font-size:12px;color:var(--red-d);font-weight:700;margin-bottom:6px}
 
@@ -703,6 +718,163 @@ input:focus,select:focus{outline:none;border-color:var(--red);box-shadow:0 0 0 3
 .confirm-box h4{font-size:16px;font-weight:800;margin-bottom:8px;color:var(--ink)}
 .confirm-box p{font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:20px}
 .confirm-actions{display:flex;gap:8px;justify-content:flex-end}
+
+
+/* ── About / Credits modal ───────────────── */
+.about-credit-btn{
+  position:fixed;
+  left:50%;
+  bottom:24px;
+  transform:translateX(-50%);
+  z-index:9996;
+  border:none;
+  background:transparent;
+  color:#a79b96;
+  font-size:10px;
+  font-weight:700;
+  letter-spacing:.04em;
+  font-family:var(--font);
+  cursor:pointer;
+  opacity:.75;
+  padding:6px 10px;
+  border-radius:999px;
+  transition:opacity .14s ease,background .14s ease,color .14s ease,transform .14s ease;
+}
+
+.about-credit-btn:hover{
+  opacity:1;
+  color:var(--red);
+  background:#fff;
+  transform:translateX(-50%) translateY(-1px);
+  box-shadow:0 8px 22px rgba(30,22,20,.10);
+}
+
+.about-modal-overlay{
+  position:fixed;
+  inset:0;
+  z-index:100000;
+  background:rgba(30,22,20,.42);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:20px;
+  animation:fadeIn .16s ease;
+}
+
+.about-modal{
+  width:min(520px,100%);
+  background:#fff;
+  border:1px solid var(--line);
+  border-radius:22px;
+  box-shadow:0 24px 70px rgba(30,22,20,.26);
+  overflow:hidden;
+  font-family:var(--font);
+}
+
+.about-modal-top{
+  background:linear-gradient(130deg,var(--red),var(--red-d));
+  color:#fff;
+  padding:22px 24px;
+  display:flex;
+  align-items:flex-start;
+  gap:14px;
+}
+
+.about-modal-icon{
+  width:42px;
+  height:42px;
+  border-radius:14px;
+  background:rgba(255,255,255,.16);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  flex-shrink:0;
+}
+
+.about-modal-icon i{font-size:24px}
+
+.about-modal-title{
+  font-size:18px;
+  font-weight:900;
+  letter-spacing:-.02em;
+  line-height:1.2;
+}
+
+.about-modal-sub{
+  font-size:12px;
+  opacity:.84;
+  margin-top:4px;
+}
+
+.about-modal-body{padding:22px 24px 20px}
+
+.credit-card{
+  background:var(--cream);
+  border:1px solid var(--line);
+  border-radius:16px;
+  padding:16px;
+  margin-bottom:14px;
+}
+
+.credit-label{
+  font-size:10px;
+  font-weight:900;
+  color:var(--muted);
+  text-transform:uppercase;
+  letter-spacing:.06em;
+  margin-bottom:5px;
+}
+
+.credit-name{
+  font-size:18px;
+  font-weight:900;
+  color:var(--ink);
+  margin-bottom:2px;
+}
+
+.credit-text{
+  font-size:13px;
+  color:var(--muted);
+  line-height:1.55;
+}
+
+.credit-grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:10px;
+  margin-top:12px;
+}
+
+.credit-mini{
+  background:#fff;
+  border:1px solid var(--line);
+  border-radius:13px;
+  padding:11px 12px;
+}
+
+.credit-mini strong{
+  display:block;
+  font-size:12px;
+  color:var(--ink);
+  margin-bottom:2px;
+}
+
+.credit-mini span{
+  font-size:11px;
+  color:var(--muted);
+}
+
+.about-modal-actions{
+  display:flex;
+  justify-content:flex-end;
+  gap:8px;
+  margin-top:16px;
+}
+
+@media(max-width:600px){
+  .credit-grid{grid-template-columns:1fr}
+  .about-credit-btn{bottom:82px}
+}
 
 /* ── Subtle credit footer + scroll-to-top ──────────────── */
 .made-by{
@@ -1028,7 +1200,7 @@ function showConfirm(title, msg, onConfirm, confirmLabel='Delete', confirmClass=
   </div>
 </div><!-- /shell -->
 
-<div class="made-by">Made by Hirbod Jabbarnezhad</div>
+<button class="about-credit-btn" onclick="openAboutModal()">Made by Hirbod Jabbarnezhad · About</button>
 
 
 <button class="undo-float-btn" id="undo-btn" onclick="undoLastAction()" title="Undo last action" aria-label="Undo last action">
@@ -1040,6 +1212,72 @@ function showConfirm(title, msg, onConfirm, confirmLabel='Delete', confirmClass=
 </button>
 
 <script>
+
+function openAboutModal(){
+  const old=document.getElementById('about-modal-overlay');
+  if(old) old.remove();
+
+  const ov=document.createElement('div');
+  ov.id='about-modal-overlay';
+  ov.className='about-modal-overlay';
+  ov.innerHTML=`
+    <div class="about-modal" role="dialog" aria-modal="true" aria-labelledby="about-title">
+      <div class="about-modal-top">
+        <div class="about-modal-icon"><i class="ti ti-calendar-event"></i></div>
+        <div>
+          <div class="about-modal-title" id="about-title">CAS ESL Schedule Builder</div>
+          <div class="about-modal-sub">Pierce College · Center for Academic Success scheduling tool</div>
+        </div>
+      </div>
+      <div class="about-modal-body">
+        <div class="credit-card">
+          <div class="credit-label">Original creator</div>
+          <div class="credit-name">Hirbod Jabbarnezhad</div>
+          <div class="credit-text">
+            Originally designed and developed by Hirbod Jabbarnezhad for the CAS ESL scheduling workflow.
+            This credit should remain included in the software, documentation, and shared copies.
+          </div>
+          <div class="credit-grid">
+            <div class="credit-mini">
+              <strong>Version</strong>
+              <span>1.0 · 2026</span>
+            </div>
+            <div class="credit-mini">
+              <strong>Authorship</strong>
+              <span>Original work by Hirbod Jabbarnezhad</span>
+            </div>
+            <div class="credit-mini">
+              <strong>Use</strong>
+              <span>Educational / institutional scheduling</span>
+            </div>
+            <div class="credit-mini">
+              <strong>Attribution</strong>
+              <span>Required in modified copies</span>
+            </div>
+          </div>
+        </div>
+        <div class="credit-text">
+          Modified versions should clearly state that they are based on the original CAS ESL Schedule Builder created by Hirbod Jabbarnezhad.
+        </div>
+        <div class="about-modal-actions">
+          <button class="btn btn-red" onclick="closeAboutModal()"><i class="ti ti-check"></i> Close</button>
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(ov);
+  ov.addEventListener('click', e=>{ if(e.target===ov) closeAboutModal(); });
+}
+
+function closeAboutModal(){
+  const ov=document.getElementById('about-modal-overlay');
+  if(ov) ov.remove();
+}
+
+document.addEventListener('keydown', e=>{
+  if(e.key==='Escape') closeAboutModal();
+});
+
+
 // ── Constants ────────────────────────────────────────────
 const DAYS_MF = ['Monday','Tuesday','Wednesday','Thursday'];
 const TIMES_MF = ['9:00','9:30','10:00','10:30','11:00','11:30','12:00','12:30','13:00','13:30','14:00','14:30','15:00','15:30','16:00','16:30'];
@@ -1128,6 +1366,13 @@ function colorFor(i){ return COLORS[i % COLORS.length]; }
 function slotKey(day,time){ return day+'-'+time; }
 function getTutorById(id){ return tutors.find(t=>String(t.id)===String(id)); }
 function getSlot(day,time){ return currentSlots.find(s=>s.day===day && s.time===time); }
+
+function isCellUncovered(day,time){
+  const slot=getSlot(day,time);
+  return !slot || !slot.assigned || slot.assigned.length===0;
+}
+
+
 function escapeHtml(str){ return String(str).replace(/[&<>"]/g, ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch])); }
 function durationText(hours){
   const mins=Math.round(hours*60);
@@ -1205,7 +1450,7 @@ function restoreAppSnapshot(snapshot){
   renderTutors();
   if(currentSlots.length){
     renderOutput(currentSlots);
-    updateScheduleStats();
+    updateScheduleStats(); paintUncoveredCells();
   } else {
     const genOut=document.getElementById('gen-out');
     if(genOut) genOut.innerHTML='';
@@ -1266,6 +1511,10 @@ function saveProject(){
     type:'cas-esl-scheduler-project',
     version:1,
     savedAt:new Date().toISOString(),
+    creator:'Hirbod Jabbarnezhad',
+    originalDeveloper:'Hirbod Jabbarnezhad',
+    copyright:'Copyright (c) 2026 Hirbod Jabbarnezhad',
+    attribution:'Originally designed and developed by Hirbod Jabbarnezhad. Attribution should remain included in shared or modified copies.',
     snapshot
   };
 
@@ -1453,7 +1702,7 @@ function deleteSelectedShift(){
       tutor.assignments=tutor.assignments.filter(a=>!(a.day===day && a.time===time));
       tutor.assignedHrs=Math.max(0,tutor.assignedHrs-0.5);
       selectedShift=null; moveMode=null;
-      closeShiftPopover(); updateScheduleStats(); renderOutput(currentSlots);
+      closeShiftPopover(); updateScheduleStats(); paintUncoveredCells(); renderOutput(currentSlots);
     },
     'Delete shift'
   );
@@ -1504,7 +1753,7 @@ function handleScheduleCellClick(day,time){
     tutor.assignments=tutor.assignments.filter(a=>!(a.day===moveMode.day && a.time===moveMode.time));
     tutor.assignments.push(to);
     moveMode=null; selectedShift=null;
-    updateScheduleStats(); renderOutput(currentSlots);
+    updateScheduleStats(); paintUncoveredCells(); renderOutput(currentSlots);
     showToast(`Moved ${tutor.name} to ${day} ${fmtInterval(time)}.`, 'ok');
   };
 
@@ -1806,7 +2055,7 @@ function removeTutor(id){
         currentSlots.forEach(slot => {
           slot.assigned = slot.assigned.filter(t => String(t.id) !== String(id));
         });
-        updateScheduleStats();
+        updateScheduleStats(); paintUncoveredCells();
         renderOutput(currentSlots);
       }
 
@@ -2080,6 +2329,16 @@ function toggleGaps(){
 }
 
 // ── Render schedule output ────────────────────────────────
+
+function paintUncoveredCells(){
+  document.querySelectorAll('.sched-table td[data-day][data-time]').forEach(td=>{
+    const day=td.dataset.day;
+    const time=td.dataset.time;
+    td.classList.toggle('uncovered-cell', isCellUncovered(day,time));
+  });
+}
+
+
 function renderOutput(slots){
   currentSlots = slots;
   const slotMap={};
