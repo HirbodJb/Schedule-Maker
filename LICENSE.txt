@@ -1,0 +1,12 @@
+Copyright (c) 2026 Hirbod Jabbarnezhad
+
+CAS ESL Schedule Builder was originally designed and developed by Hirbod Jabbarnezhad.
+
+Permission is granted to use, copy, and modify this software for educational or institutional purposes, provided that:
+
+1. The original authorship credit remains included in the software, documentation, and any shared copies.
+2. Modified versions must clearly state that they are based on the original work by Hirbod Jabbarnezhad.
+3. No person or institution may claim original authorship of this software unless they are the original creator.
+4. Redistribution without attribution is not permitted.
+
+This software is provided “as is,” without warranty of any kind.
