@@ -963,6 +963,10 @@ input:focus,select:focus{outline:none;border-color:var(--red);box-shadow:0 0 0 3
 }
 
 </style>
+
+<!-- PDF export with real document metadata -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 </head>
 <body>
 
@@ -1278,6 +1282,31 @@ document.addEventListener('keydown', e=>{
 });
 
 
+// ── App metadata / authorship ─────────────────────────────
+const APP_METADATA = Object.freeze({
+  createdBy: 'Hirbod Jabbarnezhad',
+  software: 'CAS ESL Schedule Builder',
+  version: '1.0',
+  year: '2026',
+  copyright: 'Copyright (c) 2026 Hirbod Jabbarnezhad',
+  attribution: 'Originally designed and developed by Hirbod Jabbarnezhad. Attribution should remain included in shared or modified copies.'
+});
+
+function appMetadata(){
+  return {
+    ...APP_METADATA,
+    exportedAt: new Date().toISOString()
+  };
+}
+
+function metadataComment(){
+  return `<!-- ${JSON.stringify(appMetadata())} -->`;
+}
+
+function metadataHiddenBlock(){
+  return `<pre style="display:none" data-cas-esl-metadata="true">${escapeHtml(JSON.stringify(appMetadata(), null, 2))}</pre>`;
+}
+
 // ── Constants ────────────────────────────────────────────
 const DAYS_MF = ['Monday','Tuesday','Wednesday','Thursday'];
 const TIMES_MF = ['9:00','9:30','10:00','10:30','11:00','11:30','12:00','12:30','13:00','13:30','14:00','14:30','15:00','15:30','16:00','16:30'];
@@ -1506,15 +1535,20 @@ function saveProject(){
   const snapshot = buildAppSnapshot();
   snapshot.activePane = currentSlots.length ? 'generate' : getActivePaneName();
 
+  const metadata = appMetadata();
+
   const payload = {
-    app:'CAS ESL Schedule Builder',
+    app:metadata.software,
     type:'cas-esl-scheduler-project',
-    version:1,
-    savedAt:new Date().toISOString(),
-    creator:'Hirbod Jabbarnezhad',
-    originalDeveloper:'Hirbod Jabbarnezhad',
-    copyright:'Copyright (c) 2026 Hirbod Jabbarnezhad',
-    attribution:'Originally designed and developed by Hirbod Jabbarnezhad. Attribution should remain included in shared or modified copies.',
+    version:metadata.version,
+    savedAt:metadata.exportedAt,
+    metadata,
+    createdBy:metadata.createdBy,
+    software:metadata.software,
+    creator:metadata.createdBy,
+    originalDeveloper:metadata.createdBy,
+    copyright:metadata.copyright,
+    attribution:metadata.attribution,
     snapshot
   };
 
@@ -2557,6 +2591,13 @@ function exportScheduleExcel(){
     <html>
       <head>
         <meta charset="UTF-8">
+        <meta name="application-name" content="CAS ESL Schedule Builder">
+        <meta name="author" content="Hirbod Jabbarnezhad">
+        <meta name="creator" content="Hirbod Jabbarnezhad">
+        <meta name="software" content="CAS ESL Schedule Builder">
+        <meta name="version" content="1.0">
+        <meta name="copyright" content="Copyright (c) 2026 Hirbod Jabbarnezhad">
+        ${metadataComment()}
         <style>
           table{border-collapse:collapse;font-family:Arial,sans-serif;font-size:12px}
           th{background:#b03a2e;color:#fff;font-weight:bold}
@@ -2565,6 +2606,7 @@ function exportScheduleExcel(){
         </style>
       </head>
       <body>
+        ${metadataHiddenBlock()}
         <h2>CAS ESL Weekly Schedule</h2>
         <table>
   `;
@@ -2598,52 +2640,91 @@ function exportSchedulePDF(){
   }
 
   const rows = scheduleExportRows();
-  const esc = v => String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const metadata = appMetadata();
 
-  let tableRows = '';
-  rows.forEach((row, idx) => {
-    tableRows += '<tr>';
-    row.forEach(cell => {
-      tableRows += idx === 0 ? `<th>${esc(cell)}</th>` : `<td>${esc(cell)}</td>`;
-    });
-    tableRows += '</tr>';
-  });
+  // Use jsPDF instead of window.print(). Browser-print PDFs are made by Chrome/Skia
+  // and usually ignore custom Author/Creator fields. jsPDF lets us write real PDF metadata.
+  const jspdfNamespace = window.jspdf || window.jsPDF;
+  const JsPDFConstructor = jspdfNamespace && (jspdfNamespace.jsPDF || jspdfNamespace);
 
-  const win = window.open('', '_blank');
-  if(!win){
-    showToast('Please allow pop-ups so the PDF print window can open.', 'warn');
+  if(!JsPDFConstructor){
+    showToast('PDF library is still loading. Please try again in a few seconds.', 'warn');
     return;
   }
 
-  win.document.write(`
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <title>CAS ESL Weekly Schedule</title>
-      <style>
-        @page{size:landscape;margin:0.35in}
-        body{font-family:Arial,sans-serif;color:#1e1614}
-        h1{font-size:18px;margin:0 0 4px}
-        .sub{font-size:11px;color:#666;margin-bottom:14px}
-        table{width:100%;border-collapse:collapse;font-size:10px;table-layout:fixed}
-        th{background:#b03a2e;color:white;font-weight:bold}
-        th,td{border:1px solid #bbb;padding:6px;vertical-align:top;word-wrap:break-word}
-        td:first-child,th:first-child{width:80px;font-weight:bold;background:#f3ece8;color:#1e1614}
-      </style>
-    </head>
-    <body>
-      <h1>CAS ESL Weekly Schedule</h1>
-      <div class="sub">Pierce College · Center for Academic Success</div>
-      <table>${tableRows}</table>
-      <script>
-        window.onload = () => {
-          window.print();
-        };
-      <\/script>
-    </body>
-    </html>
-  `);
-  win.document.close();
+  const doc = new JsPDFConstructor({
+    orientation:'landscape',
+    unit:'pt',
+    format:'letter'
+  });
+
+  doc.setProperties({
+    title:'CAS ESL Weekly Schedule',
+    subject:'ESL Tutor Scheduling',
+    author:metadata.createdBy,
+    keywords:`${metadata.software}, ${metadata.createdBy}, Pierce College, CAS, ESL, version ${metadata.version}, ${metadata.copyright}`,
+    creator:metadata.software
+  });
+
+  // Extra embedded authorship note. This is invisible on the page but searchable in the PDF text layer.
+  doc.setFontSize(1);
+  doc.setTextColor(255,255,255);
+  doc.text(`Metadata: ${JSON.stringify(metadata)}`, 8, 8);
+  doc.setTextColor(30,22,20);
+
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(18);
+  doc.text('CAS ESL Weekly Schedule', 40, 42);
+
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(10);
+  doc.text('Pierce College · Center for Academic Success', 40, 58);
+  doc.text(`Created by ${metadata.createdBy} · ${metadata.software} v${metadata.version}`, 40, 73);
+
+  const head = [rows[0]];
+  const body = rows.slice(1);
+
+  doc.autoTable({
+    head,
+    body,
+    startY:88,
+    theme:'grid',
+    styles:{
+      font:'helvetica',
+      fontSize:7,
+      cellPadding:4,
+      overflow:'linebreak',
+      valign:'top',
+      lineColor:[180,180,180],
+      lineWidth:0.6
+    },
+    headStyles:{
+      fillColor:[176,58,46],
+      textColor:[255,255,255],
+      fontStyle:'bold',
+      halign:'center'
+    },
+    columnStyles:{
+      0:{
+        cellWidth:70,
+        fontStyle:'bold',
+        fillColor:[243,236,232],
+        textColor:[30,22,20]
+      }
+    },
+    margin:{top:88,right:28,bottom:34,left:28},
+    didDrawPage:function(data){
+      const pageCount = doc.internal.getNumberOfPages();
+      doc.setFontSize(8);
+      doc.setTextColor(120,105,101);
+      doc.text(`${metadata.software} · Created by ${metadata.createdBy}`, data.settings.margin.left, doc.internal.pageSize.height - 16);
+      doc.text(`Page ${data.pageNumber} of ${pageCount}`, doc.internal.pageSize.width - 80, doc.internal.pageSize.height - 16);
+      doc.setTextColor(30,22,20);
+    }
+  });
+
+  doc.save('CAS ESL Weekly Schedule.pdf');
+  showToast('PDF schedule downloaded with embedded author metadata.', 'ok');
 }
 
 // ── Local smart schedule analysis ─────────────────────────
