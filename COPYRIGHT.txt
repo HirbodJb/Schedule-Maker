@@ -1,0 +1,9 @@
+CAS ESL Schedule Builder
+Copyright (c) 2026 Hirbod Jabbarnezhad
+
+Originally designed and developed by Hirbod Jabbarnezhad.
+
+This repository contains the original implementation and development history
+of the CAS ESL Schedule Builder project.
+
+All rights reserved unless otherwise stated in the LICENSE file.
