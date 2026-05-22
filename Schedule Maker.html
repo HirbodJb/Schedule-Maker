@@ -1313,6 +1313,15 @@ const TIMES_MF = ['9:00','9:30','10:00','10:30','11:00','11:30','12:00','12:30',
 const TIMES_FRI = ['10:00','10:30','11:00','11:30','12:00','12:30','13:00','13:30'];
 const ALL_DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday'];
 
+// Work policy: a tutor may not be scheduled for more than 4 consecutive hours.
+// Since the schedule uses 30-minute slots, 4 hours = 8 back-to-back slots.
+// After that, the tutor must have at least one 30-minute break before being assigned again.
+const MAX_CONSECUTIVE_WORK_SLOTS = 8;
+
+function timesForDay(day){
+  return day === 'Friday' ? TIMES_FRI : TIMES_MF;
+}
+
 const COLORS = [
   {bg:'#fdf0ef',text:'#a93226',border:'#e8a09a'},
   {bg:'#E6F1FB',text:'#0C447C',border:'#B5D4F4'},
@@ -1667,6 +1676,41 @@ function getRunForTutor(tutor,day,time){
   return {startTime:times[start], endTime:times[end+1]||null, len:end-start+1};
 }
 
+function getSlotFrom(slots,day,time){
+  return (slots||[]).find(s=>s.day===day && s.time===time);
+}
+
+function slotHasTutor(slot,tutor){
+  return !!(slot && slot.assigned && slot.assigned.some(t=>String(t.id)===String(tutor.id)));
+}
+
+function wouldExceedConsecutiveLimit(tutor,day,time,slots=currentSlots,ignore=null){
+  const times=timesForDay(day);
+  const idx=times.indexOf(time);
+  if(!tutor || idx<0) return false;
+
+  const isIgnored=(d,t)=>ignore && ignore.day===d && ignore.time===t;
+
+  const assignedAt=(i)=>{
+    const tm=times[i];
+    if(isIgnored(day,tm)) return false;
+    if(i===idx) return true; // test the proposed assignment
+    return slotHasTutor(getSlotFrom(slots,day,tm),tutor);
+  };
+
+  let start=idx;
+  while(start>0 && assignedAt(start-1)) start--;
+
+  let end=idx;
+  while(end<times.length-1 && assignedAt(end+1)) end++;
+
+  return (end-start+1)>MAX_CONSECUTIVE_WORK_SLOTS;
+}
+
+function breakPolicyMessage(tutor,day,time){
+  return `${tutor.name} cannot be assigned at ${day} ${fmtInterval(time)} because it would create more than 4 consecutive hours. A 30-minute break is required after 4 back-to-back hours.`;
+}
+
 function closeShiftPopover(){
   const old=document.getElementById('shift-popover');
   if(old) old.remove();
@@ -1779,6 +1823,10 @@ function handleScheduleCellClick(day,time){
   if(day===moveMode.day && time===moveMode.time){ cancelMoveMode(); return; }
   if(tutor.avail[slotKey(day,time)]!==true){ showToast(`${tutor.name} is not marked available for ${day} ${fmtInterval(time)}.`, 'warn'); return; }
   if(to.assigned.some(t=>String(t.id)===String(tutor.id))){ showToast(`${tutor.name} is already assigned in that slot.`, 'warn'); return; }
+  if(wouldExceedConsecutiveLimit(tutor,day,time,currentSlots,{day:moveMode.day,time:moveMode.time})){
+    showToast(breakPolicyMessage(tutor,day,time), 'warn', 6500);
+    return;
+  }
 
   const doMove = () => {
     saveUndoState('moved shift', {type:'move', tutorName:tutor.name, fromDay:moveMode.day, fromTime:moveMode.time, toDay:day, toTime:time});
@@ -2337,7 +2385,9 @@ function generateSchedule(){
   allSlots.forEach(slot=>{
     const eligible=tutors.filter(t=>{
       const key=slot.day+'-'+slot.time;
-      return t.avail[key]===true && t.assignedHrs<t.hrs;
+      return t.avail[key]===true
+        && t.assignedHrs<t.hrs
+        && !wouldExceedConsecutiveLimit(t,slot.day,slot.time,allSlots);
     });
     eligible.sort((a,b)=>(a.assignedHrs/a.hrs)-(b.assignedHrs/b.hrs));
     eligible.slice(0,3).forEach(t=>{
@@ -2439,7 +2489,8 @@ function renderOutput(slots){
         const sameCell=day===moveMode.day && t===moveMode.time;
         const available=movingTutor.avail[day+'-'+t]===true;
         const duplicate=assignedHere.some(x=>String(x.id)===String(movingTutor.id));
-        cellClass=(available&&!duplicate&&!sameCell)?'drop-ok':'drop-no';
+        const breakOk=!wouldExceedConsecutiveLimit(movingTutor,day,t,currentSlots,{day:moveMode.day,time:moveMode.time});
+        cellClass=(available&&!duplicate&&!sameCell&&breakOk)?'drop-ok':'drop-no';
       }
       if(focusedTutorId && !moveMode){
         const hasFocused=assignedHere.some(x=>String(x.id)===String(focusedTutorId));
