@@ -526,6 +526,10 @@ input:focus,select:focus{outline:none;border-color:var(--red);box-shadow:0 0 0 3
 
 /* ── Stats row ───────────────────────────  */
 .stat-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px}
+.schedule-settings{background:var(--cream);border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:16px;display:grid;grid-template-columns:1.1fr 1fr 1fr;gap:12px;align-items:end}
+.schedule-settings .setting-note{grid-column:1/-1;font-size:12px;color:var(--muted);font-weight:600;line-height:1.45}
+.schedule-period-label{font-size:12px;color:var(--muted);font-weight:800;margin:0 0 10px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.budget-ok{color:var(--ok)!important}.budget-over{color:var(--red)!important}
 .stat{background:var(--cream);border:1px solid var(--line);border-radius:14px;padding:14px 16px}
 .stat-n{font-size:26px;font-weight:900;color:var(--red);line-height:1}
 .stat-l{font-size:11px;color:var(--muted);margin-top:4px;font-weight:600;text-transform:uppercase;letter-spacing:.03em}
@@ -659,6 +663,7 @@ input:focus,select:focus{outline:none;border-color:var(--red);box-shadow:0 0 0 3
 
 @media(max-width:900px){
   .split{grid-template-columns:1fr}
+  .schedule-settings{grid-template-columns:1fr}
   .stat-row{grid-template-columns:1fr 1fr}
   .form-grid{grid-template-columns:1fr 1fr}
   .form-grid.two{grid-template-columns:1fr}
@@ -1165,9 +1170,27 @@ function showConfirm(title, msg, onConfirm, confirmLabel='Delete', confirmClass=
 
     <div class="stat-row">
       <div class="stat"><div class="stat-n" id="st-tutors">0</div><div class="stat-l">Tutors</div></div>
-      <div class="stat"><div class="stat-n" id="st-hrs">0</div><div class="stat-l">Total hrs/wk</div></div>
+      <div class="stat"><div class="stat-n" id="st-hrs">0</div><div class="stat-l">Scheduled hrs/wk</div></div>
       <div class="stat"><div class="stat-n" id="st-slots">—</div><div class="stat-l">Covered slots</div></div>
       <div class="stat"><div class="stat-n" id="st-gaps">—</div><div class="stat-l">Uncovered slots</div></div>
+    </div>
+
+    <div class="schedule-settings" aria-label="Schedule settings">
+      <div class="fg">
+        <span class="fl">Weekly hour budget</span>
+        <input id="schedule-budget" type="number" min="0" step="0.5" placeholder="e.g. 20" oninput="syncScheduleSettingsFromInputs()">
+      </div>
+      <div class="fg">
+        <span class="fl">Schedule from</span>
+        <input id="schedule-date-from" type="date" onchange="syncScheduleSettingsFromInputs()">
+      </div>
+      <div class="fg">
+        <span class="fl">Schedule to</span>
+        <input id="schedule-date-to" type="date" onchange="syncScheduleSettingsFromInputs()">
+      </div>
+      <div class="setting-note" id="schedule-settings-note">
+        Optional: set a weekly budget so generated tutor hours do not exceed that total. The 4-hour continuous-work limit is still enforced with a required 30-minute break before more work.
+      </div>
     </div>
 
     <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap">
@@ -1355,6 +1378,7 @@ let analysisPanelOpen = false;
 let undoSnapshot = null;
 let undoLabel = '';
 let undoMeta = null;
+let scheduleSettings = {weeklyBudget:null, dateFrom:'', dateTo:''};
 
 // ── Availability table ───────────────────────────────────
 function buildAvailTable(){
@@ -1421,6 +1445,83 @@ function durationText(hours){
 }
 
 
+
+function syncScheduleSettingsFromInputs(){
+  const budgetEl=document.getElementById('schedule-budget');
+  const fromEl=document.getElementById('schedule-date-from');
+  const toEl=document.getElementById('schedule-date-to');
+  const rawBudget=budgetEl && budgetEl.value!=='' ? Number(budgetEl.value) : null;
+  scheduleSettings={
+    weeklyBudget:Number.isFinite(rawBudget) && rawBudget>0 ? rawBudget : null,
+    dateFrom:fromEl ? fromEl.value : '',
+    dateTo:toEl ? toEl.value : ''
+  };
+  updateScheduleSettingsNote();
+  updateScheduleStats();
+}
+
+function applyScheduleSettingsToInputs(){
+  const budgetEl=document.getElementById('schedule-budget');
+  const fromEl=document.getElementById('schedule-date-from');
+  const toEl=document.getElementById('schedule-date-to');
+  if(budgetEl) budgetEl.value=scheduleSettings.weeklyBudget ?? '';
+  if(fromEl) fromEl.value=scheduleSettings.dateFrom || '';
+  if(toEl) toEl.value=scheduleSettings.dateTo || '';
+  updateScheduleSettingsNote();
+}
+
+function totalAssignedHours(){
+  return tutors.reduce((sum,t)=>sum+(Number(t.assignedHrs)||0),0);
+}
+
+function formatDateForDisplay(value){
+  if(!value) return '';
+  const [y,m,d]=value.split('-').map(Number);
+  if(!y||!m||!d) return value;
+  return new Date(y,m-1,d).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'});
+}
+
+function schedulePeriodText(){
+  const from=scheduleSettings.dateFrom, to=scheduleSettings.dateTo;
+  if(from && to) return `${formatDateForDisplay(from)} – ${formatDateForDisplay(to)}`;
+  if(from) return `Starting ${formatDateForDisplay(from)}`;
+  if(to) return `Through ${formatDateForDisplay(to)}`;
+  return 'Weekly schedule';
+}
+
+function updateScheduleSettingsNote(){
+  const note=document.getElementById('schedule-settings-note');
+  if(!note) return;
+  const budget=scheduleSettings.weeklyBudget;
+  const assigned=totalAssignedHours();
+  const pieces=[];
+  if(budget){
+    const remaining=budget-assigned;
+    const cls=remaining<0?'budget-over':'budget-ok';
+    pieces.push(`<span class="${cls}"><strong>Budget:</strong> ${assigned.toFixed(1)} / ${budget.toFixed(1)} hours used${remaining>=0?` · ${remaining.toFixed(1)} hours remaining`:` · ${Math.abs(remaining).toFixed(1)} hours over`}</span>`);
+  } else {
+    pieces.push('No weekly budget set. The scheduler will only use each tutor’s requested weekly hours.');
+  }
+  if(scheduleSettings.dateFrom || scheduleSettings.dateTo) pieces.push(`<strong>Period:</strong> ${escapeHtml(schedulePeriodText())}`);
+  pieces.push('Break rule: max 4 consecutive hours, then at least a 30-minute break.');
+  note.innerHTML=pieces.join(' &nbsp;·&nbsp; ');
+}
+
+function validateScheduleSettings(){
+  syncScheduleSettingsFromInputs();
+  if(scheduleSettings.dateFrom && scheduleSettings.dateTo && scheduleSettings.dateFrom>scheduleSettings.dateTo){
+    showToast('The schedule start date cannot be after the end date.', 'warn');
+    return false;
+  }
+  return true;
+}
+
+function canAssignMoreBudget(slotHours=0.5){
+  const budget=scheduleSettings.weeklyBudget;
+  if(!budget) return true;
+  return totalAssignedHours()+slotHours <= budget + 1e-9;
+}
+
 function getActivePaneName(){
   const active=document.querySelector('.pane.act');
   return active ? active.id.replace('pane-','') : 'upload';
@@ -1445,6 +1546,7 @@ function buildAppSnapshot(){
     currentAnalysisReportText,
     currentAnalysisReportHTML,
     analysisPanelOpen,
+    scheduleSettings:{...scheduleSettings},
     activePane:getActivePaneName()
   };
 }
@@ -1483,6 +1585,8 @@ function restoreAppSnapshot(snapshot){
   currentAnalysisReportText=snapshot.currentAnalysisReportText||'';
   currentAnalysisReportHTML=snapshot.currentAnalysisReportHTML||'';
   analysisPanelOpen=!!snapshot.analysisPanelOpen;
+  scheduleSettings={weeklyBudget:null,dateFrom:'',dateTo:'',...(snapshot.scheduleSettings||{})};
+  applyScheduleSettingsToInputs();
 
   closeShiftPopover();
   renderTutors();
@@ -1855,11 +1959,21 @@ function handleScheduleCellClick(day,time){
 }
 
 function updateScheduleStats(){
-  if(!currentSlots.length) return;
-  document.getElementById('st-slots').textContent=currentSlots.filter(s=>s.assigned.length>0).length;
-  document.getElementById('st-gaps').textContent=currentSlots.filter(s=>s.assigned.length===0).length;
-  document.getElementById('st-hrs').textContent=tutors.reduce((s,t)=>s+t.hrs,0);
-  document.getElementById('st-tutors').textContent=tutors.length;
+  const stSlots=document.getElementById('st-slots');
+  const stGaps=document.getElementById('st-gaps');
+  const stHrs=document.getElementById('st-hrs');
+  const stTutors=document.getElementById('st-tutors');
+  if(currentSlots.length){
+    if(stSlots) stSlots.textContent=currentSlots.filter(s=>s.assigned.length>0).length;
+    if(stGaps) stGaps.textContent=currentSlots.filter(s=>s.assigned.length===0).length;
+  }
+  if(stHrs){
+    const assigned=totalAssignedHours();
+    stHrs.textContent=currentSlots.length ? assigned.toFixed(1) : tutors.reduce((s,t)=>s+t.hrs,0);
+    stHrs.classList.toggle('budget-over', !!scheduleSettings.weeklyBudget && assigned>scheduleSettings.weeklyBudget);
+  }
+  if(stTutors) stTutors.textContent=tutors.length;
+  updateScheduleSettingsNote();
 }
 
 // ── Roster rendering ─────────────────────────────────────
@@ -2249,8 +2363,8 @@ function switchPane(name){
   updateUndoButton();
   window.scrollTo({top:0, behavior:'smooth'});
   if(name==='generate'){
-    document.getElementById('st-tutors').textContent = tutors.length;
-    document.getElementById('st-hrs').textContent = tutors.reduce((s,t)=>s+t.hrs,0);
+    applyScheduleSettingsToInputs();
+    updateScheduleStats();
   }
 }
 
@@ -2365,6 +2479,7 @@ DZ.addEventListener('drop', e=>{
 
 // ── Schedule generation ───────────────────────────────────
 function generateSchedule(){
+  if(!validateScheduleSettings()) return;
   if(currentSlots.length || tutors.some(t=>t.assignedHrs>0 || (t.assignments&&t.assignments.length)) || currentAnalysisReportText){
     saveUndoState('regenerated schedule');
   }
@@ -2390,11 +2505,12 @@ function generateSchedule(){
         && !wouldExceedConsecutiveLimit(t,slot.day,slot.time,allSlots);
     });
     eligible.sort((a,b)=>(a.assignedHrs/a.hrs)-(b.assignedHrs/b.hrs));
-    eligible.slice(0,3).forEach(t=>{
+    for(const t of eligible.slice(0,3)){
+      if(!canAssignMoreBudget(0.5)) break;
       t.assignedHrs+=0.5;
       t.assignments.push(slot);
       slot.assigned.push(t);
-    });
+    }
   });
 
   const covered=allSlots.filter(s=>s.assigned.length>0).length;
@@ -2469,7 +2585,7 @@ function renderOutput(slots){
   html+='<div class="split">';
 
   // ── Left: grid ──
-  html+=`<div class="panel ${focusedTutorId?'focus-mode':''}"><div class="panel-title">Weekly schedule grid</div><div class="sched-wrap"><table class="sched-table">`;
+  html+=`<div class="panel ${focusedTutorId?'focus-mode':''}"><div class="panel-title">Weekly schedule grid</div><div class="schedule-period-label"><i class="ti ti-calendar-time"></i> ${escapeHtml(schedulePeriodText())}${scheduleSettings.weeklyBudget?` · Weekly budget: ${scheduleSettings.weeklyBudget.toFixed(1)}h`:''}</div><div class="sched-wrap"><table class="sched-table">`;
   html+='<thead><tr><th style="width:92px">Time</th>';
   ALL_DAYS.forEach(d=>html+=`<th>${d}</th>`);
   html+='</tr></thead><tbody>';
@@ -2554,7 +2670,7 @@ function renderOutput(slots){
   html+='<div>';
 
   // Hours summary
-  html+='<div class="panel"><div class="panel-title">Hours summary</div><div style="font-size:11px;color:var(--muted);font-weight:600;margin:-6px 0 8px">Click a name to focus their schedule.</div>';
+  html+=`<div class="panel"><div class="panel-title">Hours summary</div><div style="font-size:11px;color:var(--muted);font-weight:600;margin:-6px 0 8px">Click a name to focus their schedule.</div>${scheduleSettings.weeklyBudget?`<div class="gap-item" style="background:var(--cream);color:var(--ink);border-color:var(--line);margin-bottom:8px">Total scheduled: ${totalAssignedHours().toFixed(1)} / ${scheduleSettings.weeklyBudget.toFixed(1)}h weekly budget</div>`:''}`;
   tutors.forEach((t,i)=>{
     const c=colorFor(i);
     const pct=Math.min(100,Math.round(t.assignedHrs/t.hrs*100));
@@ -2659,6 +2775,7 @@ function exportScheduleExcel(){
       <body>
         ${metadataHiddenBlock()}
         <h2>CAS ESL Weekly Schedule</h2>
+        <p><strong>Schedule period:</strong> ${esc(schedulePeriodText())}${scheduleSettings.weeklyBudget?` · <strong>Weekly budget:</strong> ${scheduleSettings.weeklyBudget.toFixed(1)} hours`:''}</p>
         <table>
   `;
 
@@ -2731,6 +2848,7 @@ function exportSchedulePDF(){
   doc.setFontSize(10);
   doc.text('Pierce College · Center for Academic Success', 40, 58);
   doc.text(`Created by ${metadata.createdBy} · ${metadata.software} v${metadata.version}`, 40, 73);
+  doc.text(`Period: ${schedulePeriodText()}${scheduleSettings.weeklyBudget?` · Weekly budget: ${scheduleSettings.weeklyBudget.toFixed(1)} hours`:''}`, 40, 88);
 
   const head = [rows[0]];
   const body = rows.slice(1);
@@ -2738,7 +2856,7 @@ function exportSchedulePDF(){
   doc.autoTable({
     head,
     body,
-    startY:88,
+    startY:104,
     theme:'grid',
     styles:{
       font:'helvetica',
@@ -2763,7 +2881,7 @@ function exportSchedulePDF(){
         textColor:[30,22,20]
       }
     },
-    margin:{top:88,right:28,bottom:34,left:28},
+    margin:{top:104,right:28,bottom:34,left:28},
     didDrawPage:function(data){
       const pageCount = doc.internal.getNumberOfPages();
       doc.setFontSize(8);
@@ -3087,6 +3205,7 @@ function formatPhone(input){
 
 buildAvailTable();
 renderTutors();
+applyScheduleSettingsToInputs();
 updateScrollTopButton('upload');
 updateUndoButton();
 </script>
