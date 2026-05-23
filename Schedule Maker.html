@@ -728,22 +728,43 @@ input:focus,select:focus{outline:none;border-color:var(--red);box-shadow:0 0 0 3
 /* ── About / Credits modal ───────────────── */
 .about-credit-btn{
   position:fixed;
+
   left:50%;
-  bottom:24px;
+  bottom:10px;
+
   transform:translateX(-50%);
+
   z-index:9996;
+
   border:none;
-  background:transparent;
+
+  background:rgba(255,255,255,.92);
+
+  backdrop-filter:blur(6px);
+
   color:#a79b96;
+
   font-size:10px;
   font-weight:700;
   letter-spacing:.04em;
   font-family:var(--font);
+
   cursor:pointer;
-  opacity:.75;
-  padding:6px 10px;
+
+  opacity:.9;
+
+  padding:6px 12px;
+
   border-radius:999px;
-  transition:opacity .14s ease,background .14s ease,color .14s ease,transform .14s ease;
+
+  box-shadow:0 6px 18px rgba(30,22,20,.08);
+
+  transition:
+    opacity .14s ease,
+    background .14s ease,
+    color .14s ease,
+    transform .14s ease,
+    box-shadow .14s ease;
 }
 
 .about-credit-btn:hover{
@@ -898,23 +919,35 @@ input:focus,select:focus{outline:none;border-color:var(--red);box-shadow:0 0 0 3
 
 .undo-float-btn{
   position:fixed;
-  left:30px;
-  bottom:30px;
+  left:18px;
+  bottom:18px;
   z-index:9997;
+
   border:1px solid var(--line-s);
   background:#fff;
   color:var(--ink);
+
   border-radius:999px;
-  padding:10px 16px;
+
+  padding:7px 12px;
+
   display:none;
   align-items:center;
-  gap:7px;
+  gap:6px;
+
   cursor:pointer;
-  box-shadow:0 10px 28px rgba(30,22,20,.16);
-  font-size:13px;
+
+  box-shadow:0 8px 20px rgba(30,22,20,.14);
+
+  font-size:12px;
   font-weight:800;
   font-family:var(--font);
-  transition:transform .14s ease,background .14s ease,color .14s ease,box-shadow .14s ease;
+
+  transition:
+    transform .14s ease,
+    background .14s ease,
+    color .14s ease,
+    box-shadow .14s ease;
 }
 
 .undo-float-btn.show{
@@ -929,7 +962,7 @@ input:focus,select:focus{outline:none;border-color:var(--red);box-shadow:0 0 0 3
 }
 
 .undo-float-btn i{
-  font-size:18px;
+  font-size:15px;
 }
 
 .scroll-top-btn{
