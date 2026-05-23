@@ -726,6 +726,24 @@ input:focus,select:focus{outline:none;border-color:var(--red);box-shadow:0 0 0 3
 
 
 
+
+
+/* ── Save project modal ───────────────────── */
+.save-project-overlay{position:fixed;inset:0;z-index:100002;background:rgba(30,22,20,.42);display:flex;align-items:center;justify-content:center;padding:20px;animation:fadeIn .16s ease}
+.save-project-modal{width:min(520px,100%);background:#fff;border:1px solid var(--line);border-radius:22px;box-shadow:0 24px 70px rgba(30,22,20,.26);overflow:hidden;font-family:var(--font)}
+.save-project-top{background:linear-gradient(130deg,var(--red),var(--red-d));color:#fff;padding:22px 24px;display:flex;align-items:flex-start;gap:14px}
+.save-project-icon{width:42px;height:42px;border-radius:14px;background:rgba(255,255,255,.16);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.save-project-icon i{font-size:24px}
+.save-project-title{font-size:18px;font-weight:900;letter-spacing:-.02em;line-height:1.2}
+.save-project-sub{font-size:12px;opacity:.84;margin-top:4px}
+.save-project-body{padding:22px 24px 20px}
+.save-project-card{background:var(--cream);border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:14px}
+.save-project-hint{font-size:12px;color:var(--muted);line-height:1.55;margin-top:8px}
+.save-project-preview{font-size:11px;color:var(--muted);font-weight:700;margin-top:10px;background:#fff;border:1px solid var(--line);border-radius:11px;padding:9px 10px;word-break:break-word}
+.save-project-actions{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin-top:16px}
+.save-project-actions .btn{min-width:112px;justify-content:center}
+@media(max-width:600px){.save-project-actions{justify-content:stretch}.save-project-actions .btn{flex:1}.save-project-body{padding:18px}}
+
 /* ── Edit tutor modal ───────────────────── */
 .edit-modal-overlay{position:fixed;inset:0;z-index:100001;background:rgba(30,22,20,.42);display:flex;align-items:center;justify-content:center;padding:20px;animation:fadeIn .16s ease}
 .edit-modal{width:min(860px,100%);max-height:92vh;overflow:auto;background:#fff;border:1px solid var(--line);border-radius:22px;box-shadow:0 24px 70px rgba(30,22,20,.26);font-family:var(--font)}
@@ -1350,7 +1368,7 @@ function closeAboutModal(){
 }
 
 document.addEventListener('keydown', e=>{
-  if(e.key==='Escape'){ closeAboutModal(); closeEditTutorModal(); }
+  if(e.key==='Escape'){ closeAboutModal(); closeEditTutorModal(); closeSaveProjectModal(); }
 });
 
 
@@ -1693,9 +1711,104 @@ function saveProject(){
     showToast('Add or import tutors before saving a project.', 'warn');
     return;
   }
+  openSaveProjectModal();
+}
 
+function defaultProjectName(){
+  const d = new Date();
+  const date = d.toLocaleDateString(undefined, {year:'numeric', month:'short', day:'numeric'});
+  return `CAS ESL Schedule — ${date}`;
+}
+
+function sanitizeProjectFileName(name){
+  return String(name || 'CAS ESL Schedule Project')
+    .trim()
+    .replace(/[<>:"/\\|?*\x00-\x1F]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 80) || 'CAS-ESL-Schedule-Project';
+}
+
+function openSaveProjectModal(){
+  closeSaveProjectModal();
+
+  const initialName = defaultProjectName();
+  const ov = document.createElement('div');
+  ov.id = 'save-project-overlay';
+  ov.className = 'save-project-overlay';
+  ov.innerHTML = `
+    <div class="save-project-modal" role="dialog" aria-modal="true" aria-labelledby="save-project-title">
+      <div class="save-project-top">
+        <div class="save-project-icon"><i class="ti ti-device-floppy"></i></div>
+        <div>
+          <div class="save-project-title" id="save-project-title">Name this project</div>
+          <div class="save-project-sub">This name will be saved inside the project file and used for the download name.</div>
+        </div>
+      </div>
+      <div class="save-project-body">
+        <div class="save-project-card">
+          <div class="fg">
+            <span class="fl">Project name <span style="color:var(--red)">*</span></span>
+            <input id="save-project-name-input" type="text" maxlength="80" value="${escapeHtml(initialName)}" placeholder="e.g. Spring 2026 ESL Tutor Schedule">
+          </div>
+          <div class="save-project-hint">
+            Example: “Spring 2026 ESL Schedule” or “Week 1 Tutor Schedule.” You can load this JSON file later to continue editing.
+          </div>
+          <div class="save-project-preview" id="save-project-preview"></div>
+        </div>
+        <div class="save-project-actions">
+          <button class="btn" type="button" onclick="closeSaveProjectModal()">Cancel</button>
+          <button class="btn btn-red" type="button" onclick="confirmSaveProject()"><i class="ti ti-download"></i> Save Project</button>
+        </div>
+      </div>
+    </div>`;
+
+  document.body.appendChild(ov);
+  ov.addEventListener('click', e=>{ if(e.target===ov) closeSaveProjectModal(); });
+
+  const input = document.getElementById('save-project-name-input');
+  const updatePreview = () => {
+    const clean = sanitizeProjectFileName(input.value || initialName);
+    const preview = document.getElementById('save-project-preview');
+    if(preview) preview.textContent = `File name: ${clean}.json`;
+  };
+
+  input.addEventListener('input', updatePreview);
+  input.addEventListener('keydown', e=>{
+    if(e.key === 'Enter') confirmSaveProject();
+  });
+
+  updatePreview();
+  setTimeout(()=>{
+    input.focus();
+    input.select();
+  }, 0);
+}
+
+function closeSaveProjectModal(){
+  const ov = document.getElementById('save-project-overlay');
+  if(ov) ov.remove();
+}
+
+function confirmSaveProject(){
+  const input = document.getElementById('save-project-name-input');
+  const projectName = (input && input.value ? input.value.trim() : '');
+
+  if(!projectName){
+    showToast('Please enter a project name before saving.', 'warn');
+    if(input) input.focus();
+    return;
+  }
+
+  downloadProjectFile(projectName);
+  closeSaveProjectModal();
+}
+
+function downloadProjectFile(projectName){
   const snapshot = buildAppSnapshot();
   snapshot.activePane = currentSlots.length ? 'generate' : getActivePaneName();
+  snapshot.projectName = projectName;
 
   const metadata = appMetadata();
 
@@ -1703,8 +1816,9 @@ function saveProject(){
     app:metadata.software,
     type:'cas-esl-scheduler-project',
     version:metadata.version,
+    projectName,
     savedAt:metadata.exportedAt,
-    metadata,
+    metadata:{...metadata, projectName},
     createdBy:metadata.createdBy,
     software:metadata.software,
     creator:metadata.createdBy,
@@ -1714,17 +1828,16 @@ function saveProject(){
     snapshot
   };
 
-  const safeDate = new Date().toISOString().slice(0,19).replace(/[:T]/g,'-');
   const blob = new Blob([JSON.stringify(payload,null,2)], {type:'application/json'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `cas-esl-schedule-project-${safeDate}.json`;
+  a.download = `${sanitizeProjectFileName(projectName)}.json`;
   document.body.appendChild(a);
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
-  showToast('Project saved as a JSON file. Keep this file to continue editing later.', 'ok', 3200);
+  showToast(`Project “${escapeHtml(projectName)}” saved. Keep this JSON file to continue editing later.`, 'ok', 3400);
 }
 
 function handleProjectFile(input){
@@ -1752,7 +1865,8 @@ function handleProjectFile(input){
         resetRosterSearchResults();
         resetScheduleSearchResults();
         closeShiftPopover();
-        showToast(`Loaded project: ${snapshot.tutors.length} tutor${snapshot.tutors.length===1?'':'s'}${snapshot.slots&&snapshot.slots.length?' with a saved schedule':''}.`, 'ok', 3400);
+        const loadedName = payload && payload.projectName ? `“${escapeHtml(payload.projectName)}” — ` : '';
+        showToast(`Loaded project: ${loadedName}${snapshot.tutors.length} tutor${snapshot.tutors.length===1?'':'s'}${snapshot.slots&&snapshot.slots.length?' with a saved schedule':''}.`, 'ok', 3600);
       };
 
       if(tutors.length || currentSlots.length){
