@@ -725,6 +725,22 @@ input:focus,select:focus{outline:none;border-color:var(--red);box-shadow:0 0 0 3
 .confirm-actions{display:flex;gap:8px;justify-content:flex-end}
 
 
+
+/* ── Edit tutor modal ───────────────────── */
+.edit-modal-overlay{position:fixed;inset:0;z-index:100001;background:rgba(30,22,20,.42);display:flex;align-items:center;justify-content:center;padding:20px;animation:fadeIn .16s ease}
+.edit-modal{width:min(860px,100%);max-height:92vh;overflow:auto;background:#fff;border:1px solid var(--line);border-radius:22px;box-shadow:0 24px 70px rgba(30,22,20,.26);font-family:var(--font)}
+.edit-modal-top{background:linear-gradient(130deg,var(--red),var(--red-d));color:#fff;padding:20px 24px;display:flex;align-items:flex-start;gap:14px}
+.edit-modal-icon{width:40px;height:40px;border-radius:14px;background:rgba(255,255,255,.16);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.edit-modal-icon i{font-size:23px}
+.edit-modal-title{font-size:17px;font-weight:900;letter-spacing:-.02em;line-height:1.2}
+.edit-modal-sub{font-size:12px;opacity:.84;margin-top:4px}
+.edit-modal-body{padding:20px 24px}
+.edit-avail-wrap{overflow:auto;border:1px solid var(--line-s);border-radius:12px;max-height:360px;margin-top:10px}
+.edit-modal-actions{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin-top:16px;padding-top:14px;border-top:1px solid var(--line)}
+.edit-btn{color:var(--red);border-color:var(--red-b)}
+.edit-btn:hover{background:var(--red-l);color:var(--red-d)}
+@media(max-width:700px){.edit-modal{max-height:96vh}.edit-modal-body{padding:16px}.edit-modal-top{padding:18px}.edit-modal-actions{justify-content:stretch}.edit-modal-actions .btn{flex:1;justify-content:center}}
+
 /* ── About / Credits modal ───────────────── */
 .about-credit-btn{
   position:fixed;
@@ -1334,7 +1350,7 @@ function closeAboutModal(){
 }
 
 document.addEventListener('keydown', e=>{
-  if(e.key==='Escape') closeAboutModal();
+  if(e.key==='Escape'){ closeAboutModal(); closeEditTutorModal(); }
 });
 
 
@@ -2050,6 +2066,7 @@ function renderTutors(){
         <div class="tc-meta">${t.hrs} hrs/wk · ${avCount} slots available · ${modeTag}${satTag} <span style="color:${stableColor};font-weight:700">${stableLabel}</span>${phoneStr}${eng101Str}${priorityStr}</div>
       </div>
       <div class="tc-actions">
+        <button class="btn btn-sm edit-btn" onclick="editTutor(${t.id})" title="Edit tutor" aria-label="Edit tutor"><i class="ti ti-edit"></i></button>
         <button class="btn btn-sm btn-danger" onclick="removeTutor(${t.id})" title="Remove"><i class="ti ti-trash"></i></button>
       </div>
     </div>`;
@@ -2259,6 +2276,185 @@ function searchRoster(){
   }
 
   highlightRosterSearchResult();
+}
+
+
+function editTutor(id){
+  const tutor = getTutorById(id);
+  if(!tutor) return;
+
+  closeEditTutorModal();
+
+  const modeOptions = [
+    ['both','In-person & online'],
+    ['oc','In-person only'],
+    ['ol','Online only']
+  ].map(([value,label])=>`<option value="${value}" ${tutor.mode===value?'selected':''}>${label}</option>`).join('');
+
+  const hrsOptions = [
+    ['3','1–5 hrs'],
+    ['8','6–10 hrs'],
+    ['12','10–15 hrs'],
+    ['16','15+ hrs (max)']
+  ].map(([value,label])=>`<option value="${value}" ${String(tutor.hrs)===value?'selected':''}>${label}</option>`).join('');
+
+  let availHtml = '<table class="avail-table"><thead><tr><th style="width:68px"></th>';
+  ALL_DAYS.forEach(d => availHtml += `<th>${d.slice(0,3)}</th>`);
+  availHtml += '</tr></thead><tbody>';
+  TIMES_MF.forEach(t => {
+    availHtml += `<tr><td class="tc-time">${fmtTime(t)}</td>`;
+    ALL_DAYS.forEach(d => {
+      const key = d + '-' + t;
+      const fri = d === 'Friday', inFri = TIMES_FRI.includes(t);
+      if(fri && !inFri){
+        availHtml += '<td class="tc-cell" style="background:var(--soft)"></td>';
+      } else {
+        const checked = tutor.avail && tutor.avail[key] === true ? 'checked' : '';
+        availHtml += `<td class="tc-cell"><input type="checkbox" class="avail-cb edit-avail-cb" data-key="${key}" ${checked}></td>`;
+      }
+    });
+    availHtml += '</tr>';
+  });
+  availHtml += '</tbody></table>';
+
+  const ov = document.createElement('div');
+  ov.id = 'edit-tutor-overlay';
+  ov.className = 'edit-modal-overlay';
+  ov.innerHTML = `
+    <div class="edit-modal" role="dialog" aria-modal="true" aria-labelledby="edit-tutor-title">
+      <div class="edit-modal-top">
+        <div class="edit-modal-icon"><i class="ti ti-edit"></i></div>
+        <div>
+          <div class="edit-modal-title" id="edit-tutor-title">Edit tutor information</div>
+          <div class="edit-modal-sub">Update roster details without removing and re-entering this person.</div>
+        </div>
+      </div>
+      <div class="edit-modal-body">
+        <div class="form-grid two" style="margin-top:0">
+          <div class="fg"><span class="fl">Full name <span style="color:var(--red)">*</span></span><input id="edit-name" value="${escapeHtml(tutor.name||'')}" placeholder="e.g. Jamie Ray"></div>
+          <div class="fg"><span class="fl">LACCD email <span style="color:var(--red)">*</span></span><input id="edit-email" value="${escapeHtml(tutor.email||'')}" placeholder="name@laccd.edu"></div>
+        </div>
+        <div class="form-grid two">
+          <div class="fg"><span class="fl">Phone number <span style="color:var(--red)">*</span></span><input id="edit-phone" type="tel" value="${escapeHtml(tutor.phone||'')}" placeholder="e.g. (818) 555-0100" onblur="formatPhone(this)"></div>
+          <div class="fg"><span class="fl">Completed ENG 101 / ENGL C1000?</span>
+            <select id="edit-eng101">
+              <option value="yes" ${tutor.eng101==='yes'?'selected':''}>Yes — completed</option>
+              <option value="no" ${tutor.eng101==='no'?'selected':''}>Not yet</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-grid" style="align-items:end">
+          <div class="fg"><span class="fl">Desired hrs / week</span><select id="edit-hrs">${hrsOptions}</select></div>
+          <div class="fg"><span class="fl" style="line-height:1.35;text-transform:none;font-size:10px;letter-spacing:0">Hours/wk in another Pierce College position (not ESL/CAS)</span><input id="edit-other" type="number" min="0" max="25" value="${Number(tutor.other)||0}" placeholder="0"></div>
+          <div class="fg"><span class="fl">Mode</span><select id="edit-mode">${modeOptions}</select></div>
+          <div class="fg"><span class="fl">Saturday</span><select id="edit-sat"><option value="no" ${!tutor.sat?'selected':''}>Not available Sat</option><option value="yes" ${tutor.sat?'selected':''}>Available Saturday</option></select></div>
+          <div class="fg"><span class="fl">Schedule stability</span><select id="edit-stable"><option value="stable" ${tutor.stable==='stable'?'selected':''}>Stable</option><option value="maybe" ${tutor.stable==='maybe'?'selected':''}>May change</option><option value="tentative" ${tutor.stable==='tentative'?'selected':''}>Tentative</option></select></div>
+        </div>
+        <div style="background:var(--warn-bg);border:1px solid var(--warn-b);border-radius:12px;padding:13px 16px;margin-top:4px">
+          <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;margin-bottom:8px">Scheduling priority acknowledgment <span style="color:var(--red)">*</span></div>
+          <p style="font-size:12px;color:var(--ink);margin-bottom:10px;line-height:1.5">ESL tutors who are available to work in person are given scheduling priority. Do you agree with this?</p>
+          <div style="display:flex;gap:12px">
+            <label style="display:flex;align-items:center;gap:7px;font-size:13px;font-weight:700;cursor:pointer"><input type="radio" name="edit-priority" value="agree" ${tutor.priority!=='disagree'?'checked':''} style="width:16px;height:16px;accent-color:var(--red);flex-shrink:0"> Agree</label>
+            <label style="display:flex;align-items:center;gap:7px;font-size:13px;font-weight:700;cursor:pointer"><input type="radio" name="edit-priority" value="disagree" ${tutor.priority==='disagree'?'checked':''} style="width:16px;height:16px;accent-color:var(--red);flex-shrink:0"> Disagree</label>
+          </div>
+        </div>
+        <div style="font-size:11px;font-weight:700;color:var(--muted);margin:14px 0 6px;text-transform:uppercase;letter-spacing:.03em">Availability — M–Th 9am–5pm · Fri 10am–2pm</div>
+        <div class="edit-avail-wrap">${availHtml}</div>
+        <div class="edit-modal-actions">
+          <button class="btn" onclick="closeEditTutorModal()">Cancel</button>
+          <button class="btn btn-sm" onclick="editSelectAllAvailability()">Select all</button>
+          <button class="btn btn-sm" onclick="editClearAvailability()">Clear</button>
+          <button class="btn btn-red" onclick="saveTutorEdit(${Number(tutor.id)})"><i class="ti ti-device-floppy"></i> Save changes</button>
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(ov);
+  ov.addEventListener('click', e=>{ if(e.target===ov) closeEditTutorModal(); });
+}
+
+function closeEditTutorModal(){
+  const ov = document.getElementById('edit-tutor-overlay');
+  if(ov) ov.remove();
+}
+
+function editSelectAllAvailability(){
+  document.querySelectorAll('#edit-tutor-overlay .edit-avail-cb').forEach(cb=>cb.checked=true);
+}
+
+function editClearAvailability(){
+  document.querySelectorAll('#edit-tutor-overlay .edit-avail-cb').forEach(cb=>cb.checked=false);
+}
+
+function saveTutorEdit(id){
+  const tutor = getTutorById(id);
+  if(!tutor) return;
+
+  const name = document.getElementById('edit-name').value.trim();
+  if(!name){ showToast('Please enter the tutor\'s full name.'); document.getElementById('edit-name').focus(); return; }
+
+  const email = document.getElementById('edit-email').value.trim();
+  if(!email){ showToast('A LACCD email address is required.'); document.getElementById('edit-email').focus(); return; }
+  const emailRx = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if(!emailRx.test(email)){ showToast('Please enter a valid email address (e.g. name@laccd.edu).'); document.getElementById('edit-email').focus(); return; }
+
+  const phone = document.getElementById('edit-phone').value.trim();
+  if(!phone){ showToast('A phone number is required so Jamie can reach this tutor if needed.'); document.getElementById('edit-phone').focus(); return; }
+
+  if(tutors.some(t => String(t.id)!==String(id) && t.email && t.email.toLowerCase()===email.toLowerCase())){
+    showToast(`Another tutor already uses the email <strong>${escapeHtml(email)}</strong>. Please check for duplicates.`);
+    return;
+  }
+
+  const phoneDigits = phone.replace(/\D/g,'');
+  if(tutors.some(t => String(t.id)!==String(id) && t.phone && t.phone.replace(/\D/g,'')===phoneDigits && phoneDigits.length>=7)){
+    showToast(`Another tutor already uses the phone number <strong>${escapeHtml(phone)}</strong>. Please check for duplicates.`);
+    return;
+  }
+
+  const priorityEl = document.querySelector('input[name="edit-priority"]:checked');
+  if(!priorityEl){ showToast('Please select Agree or Disagree for the scheduling priority acknowledgment.', 'warn'); return; }
+
+  const updatedAvail = {};
+  Object.keys(avail).forEach(k=>updatedAvail[k]=false);
+  document.querySelectorAll('#edit-tutor-overlay .edit-avail-cb').forEach(cb=>{
+    updatedAvail[cb.dataset.key] = cb.checked;
+  });
+
+  const markedSlots = Object.values(updatedAvail).filter(v=>v===true).length;
+  if(markedSlots === 0){ showToast('Please mark at least one available time slot before saving this tutor.', 'warn'); return; }
+
+  saveUndoState('edited tutor');
+
+  const updated = {
+    ...tutor,
+    name,
+    email,
+    phone,
+    eng101:document.getElementById('edit-eng101').value,
+    hrs:parseInt(document.getElementById('edit-hrs').value)||8,
+    other:parseInt(document.getElementById('edit-other').value)||0,
+    mode:document.getElementById('edit-mode').value,
+    sat:document.getElementById('edit-sat').value==='yes',
+    stable:document.getElementById('edit-stable').value,
+    priority:priorityEl.value,
+    avail:updatedAvail
+  };
+
+  Object.assign(tutor, updated);
+
+  // Keep any already-generated schedule cards in sync with the edited roster details.
+  if(currentSlots.length){
+    currentSlots.forEach(slot=>{
+      slot.assigned = slot.assigned.map(t=>String(t.id)===String(id) ? {...t, ...updated} : t);
+    });
+    updateScheduleStats();
+    renderOutput(currentSlots);
+  }
+
+  closeEditTutorModal();
+  resetRosterSearchResults();
+  renderTutors();
+  showToast(`${escapeHtml(name)} was updated.`, 'ok');
 }
 
 function removeTutor(id){
