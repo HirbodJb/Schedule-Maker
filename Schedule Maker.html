@@ -2528,9 +2528,16 @@ function saveTutorEdit(id){
   const priorityEl = document.querySelector('input[name="edit-priority"]:checked');
   if(!priorityEl){ showToast('Please select Agree or Disagree for the scheduling priority acknowledgment.', 'warn'); return; }
 
+  // Build the full slot map from first principles (not from the global add-form
+  // 'avail' object, which is empty when tutors were imported rather than manually added).
   const updatedAvail = {};
-  Object.keys(avail).forEach(k=>updatedAvail[k]=false);
-  document.querySelectorAll('#edit-tutor-overlay .edit-avail-cb').forEach(cb=>{
+  TIMES_MF.forEach(t => {
+    ALL_DAYS.forEach(d => {
+      const key = d + '-' + t;
+      updatedAvail[key] = (d === 'Friday' && !TIMES_FRI.includes(t)) ? null : false;
+    });
+  });
+  document.querySelectorAll('#edit-tutor-overlay .edit-avail-cb').forEach(cb => {
     updatedAvail[cb.dataset.key] = cb.checked;
   });
 
@@ -2905,7 +2912,7 @@ function renderOutput(slots){
       TIMES_MF.forEach(t=>{
         if(day==='Friday'&&!TIMES_FRI.includes(t)){flush();return;}
         const slot=slotMap[day+'-'+t];
-        if(slot&&slot.assigned.includes(tutor)){if(!runStart)runStart=t;runLen++;}
+        if(slot&&slot.assigned.some(a=>String(a.id)===String(tutor.id))){if(!runStart)runStart=t;runLen++;}
         else flush();
       });
       flush();
@@ -2960,7 +2967,7 @@ function renderOutput(slots){
 
       let pills='';
       assignedHere.forEach(tt=>{
-        const c=colorFor(tutors.indexOf(tt));
+        const c=colorFor(tutors.findIndex(x=>String(x.id)===String(tt.id)));
         const mode=tt.mode==='ol'?'OL':'OC';
         const info=shiftInfo[day+'-'+t+'-'+tt.id];
         const isMerged=info&&info.runLen>1;
