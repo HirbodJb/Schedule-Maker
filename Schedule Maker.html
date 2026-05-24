@@ -1159,6 +1159,27 @@ input:focus,select:focus{outline:none;border-color:var(--red);box-shadow:0 0 0 3
   font-weight:900;
 }
 
+/* ── Schedule settings validation ───────────────── */
+.schedule-settings input.input-error{
+  border-color:var(--red)!important;
+  background:var(--red-l)!important;
+  box-shadow:0 0 0 3px rgba(176,58,46,.12)!important;
+}
+.schedule-validation-error{
+  grid-column:1/-1;
+  display:none;
+  align-items:center;
+  gap:8px;
+  background:var(--red-l);
+  color:var(--red-d);
+  border:1px solid var(--red-b);
+  border-radius:12px;
+  padding:10px 12px;
+  font-size:12px;
+  font-weight:800;
+}
+.schedule-validation-error.show{display:flex}
+
 </style>
 
 <!-- PDF export with real document metadata -->
@@ -1382,6 +1403,9 @@ function showConfirm(title, msg, onConfirm, confirmLabel='Delete', confirmClass=
       </div>
       <div class="setting-note" id="schedule-settings-note">
         Optional: set a weekly budget so generated tutor hours do not exceed that total. The 4-hour continuous-work limit is still enforced with a required 30-minute break before more work.
+      </div>
+      <div class="schedule-validation-error" id="schedule-validation-error">
+        <i class="ti ti-alert-triangle"></i> <span id="schedule-validation-message"></span>
       </div>
     </div>
 
@@ -1693,8 +1717,27 @@ function syncScheduleSettingsFromInputs(){
     dateFrom:fromEl ? fromEl.value : '',
     dateTo:toEl ? toEl.value : ''
   };
+  validateScheduleSettings(false);
   updateScheduleSettingsNote();
   updateScheduleStats();
+}
+
+function setScheduleValidationError(message){
+  const box=document.getElementById('schedule-validation-error');
+  const msg=document.getElementById('schedule-validation-message');
+  if(!box || !msg) return;
+  if(message){
+    msg.textContent=message;
+    box.classList.add('show');
+  } else {
+    msg.textContent='';
+    box.classList.remove('show');
+  }
+}
+
+function markScheduleFieldError(id, hasError){
+  const el=document.getElementById(id);
+  if(el) el.classList.toggle('input-error', !!hasError);
 }
 
 function applyScheduleSettingsToInputs(){
@@ -1704,6 +1747,7 @@ function applyScheduleSettingsToInputs(){
   if(budgetEl) budgetEl.value=scheduleSettings.weeklyBudget ?? '';
   if(fromEl) fromEl.value=scheduleSettings.dateFrom || '';
   if(toEl) toEl.value=scheduleSettings.dateTo || '';
+  validateScheduleSettings(false);
   updateScheduleSettingsNote();
 }
 
@@ -1744,13 +1788,31 @@ function updateScheduleSettingsNote(){
   note.innerHTML=pieces.join(' &nbsp;·&nbsp; ');
 }
 
-function validateScheduleSettings(){
-  syncScheduleSettingsFromInputs();
-  if(scheduleSettings.dateFrom && scheduleSettings.dateTo && scheduleSettings.dateFrom>scheduleSettings.dateTo){
-    showToast('The schedule start date cannot be after the end date.', 'warn');
-    return false;
+function validateScheduleSettings(showMessage=true){
+  const budgetEl=document.getElementById('schedule-budget');
+  const fromEl=document.getElementById('schedule-date-from');
+  const toEl=document.getElementById('schedule-date-to');
+  const budgetValue=budgetEl && budgetEl.value!=='' ? Number(budgetEl.value) : null;
+  const fromValue=fromEl ? fromEl.value : '';
+  const toValue=toEl ? toEl.value : '';
+
+  let message='';
+  const budgetInvalid=budgetValue!==null && (!Number.isFinite(budgetValue) || budgetValue<0 || budgetValue>168);
+  const dateInvalid=!!(fromValue && toValue && fromValue>=toValue);
+
+  markScheduleFieldError('schedule-budget', budgetInvalid);
+  markScheduleFieldError('schedule-date-from', dateInvalid);
+  markScheduleFieldError('schedule-date-to', dateInvalid);
+
+  if(budgetInvalid){
+    message='Weekly hour budget must be between 0 and 168 hours.';
+  } else if(dateInvalid){
+    message='Schedule From must be before Schedule To.';
   }
-  return true;
+
+  setScheduleValidationError(message);
+  if(message && showMessage) showToast(message, 'warn');
+  return !message;
 }
 
 function canAssignMoreBudget(slotHours=0.5){
