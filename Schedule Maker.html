@@ -580,6 +580,126 @@ input:focus,select:focus{outline:none;border-color:var(--red);box-shadow:0 0 0 3
 .focus-mode .pill.focus-match,
 .focus-mode .pill-merged.focus-match{position:relative;z-index:1;outline:2px solid #ef9f27;box-shadow:0 0 0 3px rgba(239,159,39,.20),0 8px 22px rgba(239,159,39,.24)}
 
+
+
+/* ── Manual add-hours mode ─────────────────────────────── */
+.add-hours-help{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  background:linear-gradient(135deg,#edf7ee,#f7fff8);
+  border:1px solid var(--ok-b);
+  color:var(--ok);
+  border-radius:14px;
+  padding:12px 14px;
+  font-size:12px;
+  font-weight:800;
+  box-shadow:0 8px 24px rgba(35,107,53,.08);
+  margin-bottom:14px;
+}
+.add-hours-help .btn{margin-left:auto;background:#fff}
+.sched-table td.add-ok{
+  position:relative;
+  cursor:pointer;
+  background:#f1fbf2!important;
+  box-shadow:inset 0 0 0 2px rgba(35,107,53,.24);
+}
+.sched-table td.add-ok:hover{
+  background:#e4f7e7!important;
+  box-shadow:inset 0 0 0 3px rgba(35,107,53,.38),0 0 18px rgba(35,107,53,.16);
+}
+.sched-table td.add-ok::after{
+  content:'+';
+  position:absolute;
+  right:7px;
+  top:5px;
+  width:18px;
+  height:18px;
+  border-radius:50%;
+  background:var(--ok);
+  color:#fff;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:14px;
+  font-weight:900;
+  line-height:1;
+}
+.sched-table td.add-no{
+  background:#f7f1ef!important;
+  opacity:.45;
+  filter:grayscale(.15);
+}
+.add-hours-btn{
+  padding:6px 10px;
+  font-size:11px;
+  margin-top:0;
+  white-space:nowrap;
+  border-radius:999px;
+}
+
+/* Cleaner hours summary rows with Add button */
+.hours-summary-card{
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+.hours-tutor-row{
+  display:grid;
+  grid-template-columns:34px 1fr auto;
+  grid-template-areas:
+    "avatar info button"
+    "avatar progress button";
+  align-items:center;
+  column-gap:10px;
+  row-gap:6px;
+  padding:12px 10px;
+  border:1px solid var(--line);
+  border-radius:14px;
+  background:#fff;
+  border-bottom:1px solid var(--line)!important;
+}
+.hours-tutor-row:hover{
+  background:var(--cream);
+  box-shadow:0 6px 18px rgba(30,22,20,.08);
+}
+.hours-tutor-row .h-av{grid-area:avatar}
+.hours-tutor-info{
+  grid-area:info;
+  min-width:0;
+  display:flex;
+  flex-direction:column;
+  gap:2px;
+}
+.hours-tutor-info .h-name{
+  line-height:1.25;
+  overflow-wrap:anywhere;
+}
+.hours-tutor-hours{
+  font-size:11px;
+  color:var(--muted);
+  font-weight:800;
+  white-space:nowrap;
+}
+.hours-tutor-progress{
+  grid-area:progress;
+  min-width:0;
+}
+.hours-tutor-actions{
+  grid-area:button;
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+}
+.hours-tutor-row.focus-active{background:#fff8ec;border-color:var(--warn-b)!important}
+.hours-tutor-row.focus-muted{opacity:.5;filter:grayscale(.2)}
+
+@media(max-width:1100px){
+  .hours-tutor-row{grid-template-columns:32px 1fr;grid-template-areas:"avatar info" "progress progress" "button button"}
+  .hours-tutor-actions{justify-content:stretch}
+  .hours-tutor-actions .btn{width:100%;justify-content:center}
+}
+
 /* ── Smart analysis output ─────────────────────────── */
 .ai-panel{background:#fff;border:1px solid var(--line);border-radius:16px;padding:20px;margin-top:14px}
 .schedule-analysis-panel{
@@ -1438,6 +1558,7 @@ let selectedShift = null;
 let moveMode = null;
 let showAllGaps = false;
 let focusedTutorId = null;
+let addHoursMode = null;
 let rosterSearchResults = [];
 let rosterSearchIndex = -1;
 let rosterSearchQuery = '';
@@ -1696,6 +1817,7 @@ function restoreAppSnapshot(snapshot){
   // This prevents old move-mode banners/cancel buttons from coming back after confirming Undo.
   selectedShift=null;
   moveMode=null;
+  addHoursMode=null;
   showAllGaps=!!snapshot.showAllGaps;
   focusedTutorId=snapshot.focusedTutorId;
   currentAnalysisReportText=snapshot.currentAnalysisReportText||'';
@@ -2044,7 +2166,7 @@ function openShiftPopover(event,tutorId,day,time){
   // Important fix:
   // If move mode is already active, clicking any pill should be treated as
   // clicking that schedule cell. It should NOT open another popover.
-  if(moveMode){
+  if(moveMode || addHoursMode){
     handleScheduleCellClick(day,time);
     return;
   }
@@ -2105,6 +2227,7 @@ function deleteSelectedShift(){
 
 function startMoveMode(){
   if(!selectedShift) return;
+  addHoursMode=null;
   moveMode={...selectedShift};
   closeShiftPopover();
   renderOutput(currentSlots);
@@ -2115,6 +2238,72 @@ function cancelMoveMode(){
   selectedShift=null;
   closeShiftPopover();
   renderOutput(currentSlots);
+}
+
+function startAddHoursMode(tutorId){
+  if(!currentSlots.length){
+    showToast('Generate a schedule first, then you can manually add hours.', 'warn');
+    return;
+  }
+  const tutor=getTutorById(tutorId);
+  if(!tutor) return;
+  addHoursMode={tutorId:tutor.id};
+  moveMode=null;
+  selectedShift=null;
+  focusedTutorId=String(tutor.id);
+  closeShiftPopover();
+  renderOutput(currentSlots);
+  showToast(`Add-hours mode is on for ${escapeHtml(tutor.name)}. Click a green open cell to add a 30-minute slot.`, 'ok', 4200);
+}
+
+function cancelAddHoursMode(){
+  addHoursMode=null;
+  renderOutput(currentSlots);
+}
+
+function slotHasOpenCapacity(slot){
+  return !!slot && slot.assigned.length < 3;
+}
+
+function manualAddBlockedReason(tutor,day,time){
+  const slot=getSlot(day,time);
+  if(!slot) return 'That schedule cell is not available.';
+  if(tutor.avail[slotKey(day,time)]!==true) return `${tutor.name} is not marked available for ${day} ${fmtInterval(time)}.`;
+  if(!slotHasOpenCapacity(slot)) return `That slot already has the maximum number of tutors.`;
+  if(slot.assigned.some(t=>String(t.id)===String(tutor.id))) return `${tutor.name} is already assigned in that slot.`;
+  if((Number(tutor.assignedHrs)||0) >= (Number(tutor.hrs)||0)) return `${tutor.name} already reached their desired weekly hours.`;
+  if(!canAssignMoreBudget(0.5)) return `The weekly hour budget does not have enough room for another 30-minute slot.`;
+  if(wouldExceedConsecutiveLimit(tutor,day,time,currentSlots)) return breakPolicyMessage(tutor,day,time);
+  return '';
+}
+
+function isManualAddSlotValid(tutor,day,time){
+  return !manualAddBlockedReason(tutor,day,time);
+}
+
+function validManualAddSlotsCount(tutor){
+  if(!currentSlots.length || !tutor) return 0;
+  return currentSlots.filter(s=>isManualAddSlotValid(tutor,s.day,s.time)).length;
+}
+
+function handleAddHoursCellClick(day,time){
+  if(!addHoursMode) return;
+  const tutor=getTutorById(addHoursMode.tutorId);
+  if(!tutor) return;
+  const reason=manualAddBlockedReason(tutor,day,time);
+  if(reason){
+    showToast(reason, 'warn', 5500);
+    return;
+  }
+  const slot=getSlot(day,time);
+  saveUndoState('added shift', {type:'manual-add', tutorName:tutor.name, day, time});
+  slot.assigned.push(tutor);
+  tutor.assignments.push(slot);
+  tutor.assignedHrs=(Number(tutor.assignedHrs)||0)+0.5;
+  updateScheduleStats();
+  paintUncoveredCells();
+  renderOutput(currentSlots);
+  showToast(`Added ${tutor.name} to ${day} ${fmtInterval(time)}.`, 'ok');
 }
 
 function focusTutor(tutorId){
@@ -2131,6 +2320,10 @@ function clearTutorFocus(){
 }
 
 function handleScheduleCellClick(day,time){
+  if(addHoursMode){
+    handleAddHoursCellClick(day,time);
+    return;
+  }
   if(!moveMode) return;
   const tutor=getTutorById(moveMode.tutorId);
   const from=getSlot(moveMode.day,moveMode.time);
@@ -2752,7 +2945,8 @@ function clearAll(){
     'This will delete all tutors and the current schedule. This cannot be undone.',
     ()=>{
       saveUndoState('clear all');
-      tutors=[]; currentSlots=[]; selectedShift=null; moveMode=null; focusedTutorId=null; showAllGaps=false; currentAnalysisReportText=''; currentAnalysisReportHTML=''; analysisPanelOpen=false; resetRosterSearchResults(); resetScheduleSearchResults();
+      tutors=[]; currentSlots=[]; selectedShift=null; moveMode=null; focusedTutorId=null; showAllGaps=false; currentAnalysisReportText=''; currentAnalysisReportHTML=''; analysisPanelOpen=false;
+  addHoursMode=null; moveMode=null; selectedShift=null; resetRosterSearchResults(); resetScheduleSearchResults();
       closeShiftPopover();
       document.getElementById('gen-out').innerHTML='';
       document.getElementById('st-tutors').textContent='0';
@@ -2987,6 +3181,11 @@ function renderOutput(slots){
   });
 
   let html='';
+  if(addHoursMode){
+    const at=getTutorById(addHoursMode.tutorId);
+    const remaining=at ? Math.max(0,(Number(at.hrs)||0)-(Number(at.assignedHrs)||0)) : 0;
+    html+=`<div class="add-hours-help"><i class="ti ti-circle-plus"></i> Add-hours mode: click any green open cell to add ${at?escapeHtml(at.name):'this tutor'} based on availability. ${at?`Remaining target: ${remaining.toFixed(1)}h`:''}<button class="btn btn-sm" onclick="cancelAddHoursMode()"><i class="ti ti-x"></i> Cancel</button></div>`;
+  }
   if(moveMode){
     const mt=getTutorById(moveMode.tutorId);
     html+=`<div class="move-help"><i class="ti ti-arrows-move"></i> Move mode: choose a valid destination cell for ${mt?escapeHtml(mt.name):'this tutor'}, or <button class="btn btn-sm" onclick="cancelMoveMode()" style="margin-left:auto">Cancel</button></div>`;
@@ -3024,8 +3223,11 @@ function renderOutput(slots){
         const duplicate=assignedHere.some(x=>String(x.id)===String(movingTutor.id));
         const breakOk=!wouldExceedConsecutiveLimit(movingTutor,day,t,currentSlots,{day:moveMode.day,time:moveMode.time});
         cellClass=(available&&!duplicate&&!sameCell&&breakOk)?'drop-ok':'drop-no';
+      } else if(addHoursMode){
+        const addTutor=getTutorById(addHoursMode.tutorId);
+        cellClass=(addTutor && isManualAddSlotValid(addTutor,day,t))?'add-ok':'add-no';
       }
-      if(focusedTutorId && !moveMode){
+      if(focusedTutorId && !moveMode && !addHoursMode){
         const hasFocused=assignedHere.some(x=>String(x.id)===String(focusedTutorId));
         cellClass=(cellClass+' '+(hasFocused?'focus-match-cell':'focus-other')).trim();
       }
@@ -3087,21 +3289,23 @@ function renderOutput(slots){
   html+='<div>';
 
   // Hours summary
-  html+=`<div class="panel"><div class="panel-title">Hours summary</div><div style="font-size:11px;color:var(--muted);font-weight:600;margin:-6px 0 8px">Click a name to focus their schedule.</div>${scheduleSettings.weeklyBudget?`<div class="gap-item" style="background:var(--cream);color:var(--ink);border-color:var(--line);margin-bottom:8px">Total scheduled: ${totalAssignedHours().toFixed(1)} / ${scheduleSettings.weeklyBudget.toFixed(1)}h weekly budget</div>`:''}`;
+  html+=`<div class="panel"><div class="panel-title">Hours summary</div><div style="font-size:11px;color:var(--muted);font-weight:600;margin:-6px 0 10px">Click a name to focus their schedule, or use Add to manually place extra available hours.</div>${scheduleSettings.weeklyBudget?`<div class="gap-item" style="background:var(--cream);color:var(--ink);border-color:var(--line);margin-bottom:10px">Total scheduled: ${totalAssignedHours().toFixed(1)} / ${scheduleSettings.weeklyBudget.toFixed(1)}h weekly budget</div>`:''}<div class="hours-summary-card">`;
   tutors.forEach((t,i)=>{
     const c=colorFor(i);
     const pct=Math.min(100,Math.round(t.assignedHrs/t.hrs*100));
     const cls=t.assignedHrs>t.hrs?'over':t.assignedHrs<t.hrs*0.5?'low':'';
     const focusRowClass=focusedTutorId?(String(focusedTutorId)===String(t.id)?' focus-active':' focus-muted'):'';
-    html+=`<div class="h-row${focusRowClass}" id="hours-row-${t.id}" onclick="focusTutor(${t.id})" title="Focus ${escapeHtml(t.name)}'s schedule">
+    html+=`<div class="h-row hours-tutor-row${focusRowClass}" id="hours-row-${t.id}" onclick="focusTutor(${t.id})" title="Focus ${escapeHtml(t.name)}'s schedule">
       <div class="h-av" style="background:${c.bg};color:${c.text}">${initials(t.name)}</div>
-      <div style="flex:1">
+      <div class="hours-tutor-info">
         <div class="h-name">${t.name}</div>
-        <div class="h-bar-wrap"><div class="h-bar ${cls}" style="width:${pct}%"></div></div>
+        <div class="hours-tutor-hours">${t.assignedHrs.toFixed(1)} / ${t.hrs}h</div>
       </div>
-      <div class="h-num">${t.assignedHrs.toFixed(1)} / ${t.hrs}h</div>
+      <div class="hours-tutor-progress"><div class="h-bar-wrap"><div class="h-bar ${cls}" style="width:${pct}%"></div></div></div>
+      <div class="hours-tutor-actions"><button class="btn btn-sm add-hours-btn" onclick="event.stopPropagation(); startAddHoursMode(${t.id})" title="Manually add more hours for ${escapeHtml(t.name)}"><i class="ti ti-circle-plus"></i> Add</button></div>
     </div>`;
   });
+  html+='</div>';
   if(focusedTutorId){ html+='<button class="btn btn-sm" onclick="clearTutorFocus()" style="width:100%;justify-content:center;margin-top:10px"><i class="ti ti-x"></i> Exit focus mode</button>'; }
   html+='</div>';
 
