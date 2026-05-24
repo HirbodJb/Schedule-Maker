@@ -252,6 +252,11 @@ input:focus,select:focus{outline:none;border-color:var(--red);box-shadow:0 0 0 3
 .avail-table td.tc-cell:last-child{border-right:none}
 .avail-table tr:nth-child(even) td.tc-cell{background:#fffaf7}
 .avail-cb{width:20px;height:20px;accent-color:var(--red);cursor:pointer;display:block;margin:auto}
+.avail-table td.tc-cell.availability-click-cell{cursor:pointer;transition:background .12s,box-shadow .12s}
+.avail-table td.tc-cell.availability-click-cell:hover{box-shadow:inset 0 0 0 2px rgba(176,58,46,.16)}
+.avail-table td.tc-cell.available-cell{box-shadow:none}
+.avail-table td.tc-cell.available-cell:hover{box-shadow:inset 0 0 0 2px rgba(176,58,46,.16)}
+
 
 /* ── Schedule grid ───────────────────────  */
 .sched-wrap{overflow:auto;border:1px solid var(--line);border-radius:18px;max-height:700px;background:#fff;clip-path:inset(0 round 18px);padding-right:2px;padding-bottom:2px;}
@@ -1459,8 +1464,14 @@ function buildAvailTable(){
     ALL_DAYS.forEach(d => {
       const key = d+'-'+t;
       const fri = d==='Friday', inFri = TIMES_FRI.includes(t);
-      if(fri && !inFri){ avail[key]=null; html+=`<td class="tc-cell" style="background:var(--soft)"></td>`; }
-      else { avail[key]=false; html+=`<td class="tc-cell"><input type="checkbox" class="avail-cb" id="cb-${key}" onchange="avail['${key}']=this.checked"></td>`; }
+      if(fri && !inFri){
+        avail[key]=null;
+        html+=`<td class="tc-cell" style="background:var(--soft)"></td>`;
+      }
+      else {
+        avail[key]=false;
+        html+=`<td class="tc-cell availability-click-cell" onclick="toggleAvailCell(this,'${key}')"><input type="checkbox" class="avail-cb" id="cb-${key}" onclick="event.stopPropagation()" onchange="setAvailCell(this,'${key}')"></td>`;
+      }
     });
     html += '</tr>';
   });
@@ -1468,8 +1479,46 @@ function buildAvailTable(){
   tbl.innerHTML = html;
 }
 
-function selectAll(){ Object.keys(avail).forEach(k=>{ if(avail[k]!==null){ avail[k]=true; const el=document.getElementById('cb-'+k); if(el) el.checked=true; }}); }
-function clearAvail(){ Object.keys(avail).forEach(k=>{ if(avail[k]!==null){ avail[k]=false; const el=document.getElementById('cb-'+k); if(el) el.checked=false; }}); }
+function setAvailCell(cb, key){
+  avail[key] = cb.checked;
+  const cell = cb.closest('td');
+  if(cell) cell.classList.toggle('available-cell', cb.checked);
+}
+
+function toggleAvailCell(cell, key){
+  const cb = cell.querySelector('input[type="checkbox"]');
+  if(!cb) return;
+  cb.checked = !cb.checked;
+  setAvailCell(cb, key);
+}
+
+function selectAll(){
+  Object.keys(avail).forEach(k=>{
+    if(avail[k]!==null){
+      avail[k]=true;
+      const el=document.getElementById('cb-'+k);
+      if(el){
+        el.checked=true;
+        const cell=el.closest('td');
+        if(cell) cell.classList.add('available-cell');
+      }
+    }
+  });
+}
+
+function clearAvail(){
+  Object.keys(avail).forEach(k=>{
+    if(avail[k]!==null){
+      avail[k]=false;
+      const el=document.getElementById('cb-'+k);
+      if(el){
+        el.checked=false;
+        const cell=el.closest('td');
+        if(cell) cell.classList.remove('available-cell');
+      }
+    }
+  });
+}
 
 // ── Utilities ────────────────────────────────────────────
 function fmtTime(t){
@@ -2424,7 +2473,7 @@ function editTutor(id){
         availHtml += '<td class="tc-cell" style="background:var(--soft)"></td>';
       } else {
         const checked = tutor.avail && tutor.avail[key] === true ? 'checked' : '';
-        availHtml += `<td class="tc-cell"><input type="checkbox" class="avail-cb edit-avail-cb" data-key="${key}" ${checked}></td>`;
+        availHtml += `<td class="tc-cell availability-click-cell ${checked ? 'available-cell' : ''}" onclick="toggleEditAvailCell(this)"><input type="checkbox" class="avail-cb edit-avail-cb" data-key="${key}" ${checked} onclick="event.stopPropagation()" onchange="syncAvailabilityCellVisual(this)"></td>`;
       }
     });
     availHtml += '</tr>';
@@ -2491,12 +2540,30 @@ function closeEditTutorModal(){
   if(ov) ov.remove();
 }
 
+function syncAvailabilityCellVisual(cb){
+  const cell = cb.closest('td');
+  if(cell) cell.classList.toggle('available-cell', cb.checked);
+}
+
+function toggleEditAvailCell(cell){
+  const cb = cell.querySelector('input[type="checkbox"]');
+  if(!cb) return;
+  cb.checked = !cb.checked;
+  syncAvailabilityCellVisual(cb);
+}
+
 function editSelectAllAvailability(){
-  document.querySelectorAll('#edit-tutor-overlay .edit-avail-cb').forEach(cb=>cb.checked=true);
+  document.querySelectorAll('#edit-tutor-overlay .edit-avail-cb').forEach(cb=>{
+    cb.checked=true;
+    syncAvailabilityCellVisual(cb);
+  });
 }
 
 function editClearAvailability(){
-  document.querySelectorAll('#edit-tutor-overlay .edit-avail-cb').forEach(cb=>cb.checked=false);
+  document.querySelectorAll('#edit-tutor-overlay .edit-avail-cb').forEach(cb=>{
+    cb.checked=false;
+    syncAvailabilityCellVisual(cb);
+  });
 }
 
 function saveTutorEdit(id){
