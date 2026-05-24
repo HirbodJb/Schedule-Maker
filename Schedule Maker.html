@@ -1279,7 +1279,7 @@ function showConfirm(title, msg, onConfirm, confirmLabel='Delete', confirmClass=
             <option value="3">1–5 hrs</option>
             <option value="8" selected>6–10 hrs</option>
             <option value="12">10–15 hrs</option>
-            <option value="16">15+ hrs (max)</option>
+            <option value="24">15–24 hrs (max)</option>
           </select>
         </div>
         <div class="fg">
@@ -2257,7 +2257,17 @@ function startAddHoursMode(tutorId){
 }
 
 function cancelAddHoursMode(){
+  const exitingTutorId = addHoursMode ? String(addHoursMode.tutorId) : null;
   addHoursMode=null;
+
+  // Add-hours mode automatically focuses the selected tutor so coordinators can
+  // clearly see only that tutor's schedule while adding more slots. When leaving
+  // add-hours mode, clear that matching focus at the same time so one click
+  // returns the schedule to normal.
+  if(exitingTutorId && String(focusedTutorId) === exitingTutorId){
+    focusedTutorId = null;
+  }
+
   renderOutput(currentSlots);
 }
 
@@ -2651,7 +2661,7 @@ function editTutor(id){
     ['3','1–5 hrs'],
     ['8','6–10 hrs'],
     ['12','10–15 hrs'],
-    ['16','15+ hrs (max)']
+    ['24','15–24 hrs (max)']
   ].map(([value,label])=>`<option value="${value}" ${String(tutor.hrs)===value?'selected':''}>${label}</option>`).join('');
 
   let availHtml = '<table class="avail-table"><thead><tr><th style="width:68px"></th>';
@@ -3022,6 +3032,24 @@ function handleCSV(input){
   input.value = ''; // reset so same file can be selected again
 }
 
+
+function parseDesiredHours(raw){
+  const text = String(raw || '').trim().toLowerCase();
+  if(!text) return 8;
+
+  // Google Forms answers may come in as labels like "1–5 hrs",
+  // "6–10 hrs", "10–15 hrs", or "15–24 hrs (max)".
+  // Use the scheduling target for each range, with 24 as the true weekly cap.
+  if(text.includes('15') && (text.includes('24') || text.includes('+') || text.includes('max'))) return 24;
+  if(text.includes('10') && text.includes('15')) return 12;
+  if(text.includes('6') && text.includes('10')) return 8;
+  if(text.includes('1') && text.includes('5')) return 3;
+
+  const n = parseFloat(text.replace(/[^0-9.]/g,''));
+  if(!Number.isFinite(n) || n <= 0) return 8;
+  return Math.min(24, n);
+}
+
 function parseCSVText(text){
   const lines = text.trim().split('\n').filter(l=>l.trim());
   if(lines.length<2){ showStatus('import-status','No data rows found in CSV.','err'); return; }
@@ -3041,7 +3069,7 @@ function parseCSVText(text){
     if(tutors.find(t=>t.name.toLowerCase()===name.toLowerCase())) continue;
 
     const email = row['email']||row['laccd email']||'';
-    const hrs = parseInt(row['hours']||row['desired hours']||row['hrs']||'8')||8;
+    const hrs = parseDesiredHours(row['hours']||row['desired hours']||row['hrs']||'8');
     const modeRaw = (row['mode']||row['mode preference']||'both').toLowerCase();
     const mode = modeRaw.includes('online')&&!modeRaw.includes('person')?'ol':modeRaw.includes('person')&&!modeRaw.includes('online')?'oc':'both';
     const sat = (row['saturday']||'').toLowerCase().includes('yes');
@@ -3190,7 +3218,7 @@ function renderOutput(slots){
     const mt=getTutorById(moveMode.tutorId);
     html+=`<div class="move-help"><i class="ti ti-arrows-move"></i> Move mode: choose a valid destination cell for ${mt?escapeHtml(mt.name):'this tutor'}, or <button class="btn btn-sm" onclick="cancelMoveMode()" style="margin-left:auto">Cancel</button></div>`;
   }
-  if(focusedTutorId){
+  if(focusedTutorId && !addHoursMode){
     const ft=getTutorById(focusedTutorId);
     if(ft){
       html+=`<div class="focus-help"><i class="ti ti-user-search"></i> Focus mode: showing ${escapeHtml(ft.name)}'s schedule. Everyone else is greyed out. <button class="btn btn-sm" onclick="clearTutorFocus()"><i class="ti ti-x"></i> Exit focus</button></div>`;
@@ -3306,7 +3334,7 @@ function renderOutput(slots){
     </div>`;
   });
   html+='</div>';
-  if(focusedTutorId){ html+='<button class="btn btn-sm" onclick="clearTutorFocus()" style="width:100%;justify-content:center;margin-top:10px"><i class="ti ti-x"></i> Exit focus mode</button>'; }
+  if(focusedTutorId && !addHoursMode){ html+='<button class="btn btn-sm" onclick="clearTutorFocus()" style="width:100%;justify-content:center;margin-top:10px"><i class="ti ti-x"></i> Exit focus mode</button>'; }
   html+='</div>';
 
   // Gaps
