@@ -836,6 +836,48 @@ input:focus,select:focus{outline:none;border-color:var(--red);box-shadow:0 0 0 3
   text-transform:uppercase;
   letter-spacing:.03em;
 }
+
+.quality-score-piece{
+  position:relative;
+  cursor:help;
+}
+
+.quality-help-tip{
+  position:fixed;
+  z-index:100020;
+  max-width:280px;
+  background:#fff;
+  color:var(--ink);
+  border:1px solid var(--line-s);
+  border-radius:14px;
+  padding:11px 13px;
+  font-size:12px;
+  line-height:1.5;
+  box-shadow:0 16px 42px rgba(30,22,20,.24);
+  opacity:0;
+  transform:translateY(6px) scale(.98);
+  pointer-events:none;
+  transition:opacity .16s ease, transform .16s ease;
+}
+
+.quality-help-tip.show{
+  opacity:1;
+  transform:translateY(0) scale(1);
+}
+
+.quality-help-tip strong{
+  display:block;
+  color:var(--red-d);
+  font-size:12px;
+  font-weight:900;
+  margin-bottom:4px;
+}
+
+.quality-score-piece{
+  position:relative;
+  cursor:help;
+}
+
 @media(max-width:900px){
   .quality-score-bars{grid-template-columns:1fr 1fr}
 }
@@ -4058,6 +4100,17 @@ function exportSchedulePDF(){
   showToast('PDF schedule downloaded with embedded author metadata.', 'ok');
 }
 
+
+window.addEventListener('error', function(e){
+  const btn=document.getElementById('ai-btn');
+  const body=document.getElementById('ai-body');
+  if(btn && btn.disabled && btn.textContent.includes('Analyzing')){
+    btn.disabled=false;
+    btn.innerHTML='<i class="ti ti-chart-dots"></i> Analyze schedule';
+    if(body) body.innerHTML='<div class="analysis-note">The analysis stopped because of a script error. Please try again after refreshing the page.</div>';
+  }
+});
+
 // ── Local smart schedule analysis ─────────────────────────
 
 function clampScore(value){
@@ -4138,6 +4191,60 @@ function calculateScheduleQuality(slots=currentSlots){
     uncoveredCount: uncoveredSlots.length,
     longestRunSlots: longestRun
   };
+}
+
+
+
+let qualityTooltipTimer = null;
+
+function ensureQualityTooltip(){
+  let tip = document.getElementById('quality-help-tip');
+  if(!tip){
+    tip = document.createElement('div');
+    tip.id = 'quality-help-tip';
+    tip.className = 'quality-help-tip';
+    document.body.appendChild(tip);
+  }
+  return tip;
+}
+
+function positionQualityTooltip(event){
+  const tip = ensureQualityTooltip();
+  const pad = 14;
+  let x = event.clientX + pad;
+  let y = event.clientY + pad;
+
+  const rect = tip.getBoundingClientRect();
+  if(x + rect.width > window.innerWidth - 10) x = event.clientX - rect.width - pad;
+  if(y + rect.height > window.innerHeight - 10) y = event.clientY - rect.height - pad;
+
+  tip.style.left = Math.max(10, x) + 'px';
+  tip.style.top = Math.max(10, y) + 'px';
+}
+
+function showQualityTooltip(event, el){
+  const tip = ensureQualityTooltip();
+  const title = el.dataset.tipTitle || '';
+  const text = el.dataset.tipText || '';
+
+  tip.innerHTML = `<strong>${escapeHtml(title)}</strong>${escapeHtml(text)}`;
+  positionQualityTooltip(event);
+
+  clearTimeout(qualityTooltipTimer);
+  qualityTooltipTimer = setTimeout(()=>{
+    tip.classList.add('show');
+  }, 600);
+}
+
+function moveQualityTooltip(event){
+  const tip = document.getElementById('quality-help-tip');
+  if(tip) positionQualityTooltip(event);
+}
+
+function hideQualityTooltip(){
+  clearTimeout(qualityTooltipTimer);
+  const tip = document.getElementById('quality-help-tip');
+  if(tip) tip.classList.remove('show');
 }
 
 
@@ -4266,16 +4373,18 @@ function runAIOptimize(){
     }
   });
 
-  mainFindings.unshift(`Schedule quality score: ${quality.overall}% (${quality.label}). This combines coverage, fairness, break comfort, balanced assignments, and uncovered slots.`);
-
   const textLines=[];
   textLines.push('Smart Schedule Analysis');
+  textLines.push('');
+  textLines.push(`Schedule Quality: ${quality.overall}% (${quality.label}).`);
+  textLines.push(`Quality factors: coverage ${quality.coverageScore}%, fairness ${quality.fairnessScore}%, consecutive-hours comfort ${quality.consecutiveScore}%, balanced assignments ${quality.balancedAssignmentsScore}%, uncovered-slots control ${quality.uncoveredScore}%.`);
   textLines.push('');
   textLines.push(`Overall: ${totalAssigned.toFixed(1)} of ${totalDesired} requested tutor-hours are scheduled.`);
   textLines.push(`Coverage: ${coveredSlots.length} covered slots, ${uncoveredSlots.length} uncovered slots, and ${thinCoverage.length} thinly covered slots with only 1 tutor.`);
   textLines.push('');
 
   const mainFindings=[];
+  mainFindings.push(`Schedule quality score: ${quality.overall}% (${quality.label}). This combines coverage, fairness, break balance, balanced assignments, and uncovered slots.`);
   if(uncoveredSlots.length===0 && thinCoverage.length===0){
     mainFindings.push('Strong coverage: every open time slot has tutor coverage, and no slot is limited to only one tutor.');
   } else {
@@ -4366,11 +4475,26 @@ function runAIOptimize(){
         </div>
       </div>
       <div class="quality-score-bars">
-        <div class="quality-score-piece"><strong>${quality.coverageScore}%</strong><span>Coverage</span></div>
-        <div class="quality-score-piece"><strong>${quality.fairnessScore}%</strong><span>Fairness</span></div>
-        <div class="quality-score-piece"><strong>${quality.consecutiveScore}%</strong><span>Break comfort</span></div>
-        <div class="quality-score-piece"><strong>${quality.balancedAssignmentsScore}%</strong><span>Balance</span></div>
-        <div class="quality-score-piece"><strong>${quality.uncoveredScore}%</strong><span>Uncovered</span></div>
+        <div class="quality-score-piece" onmouseenter="showQualityTooltip(event, this)" onmousemove="moveQualityTooltip(event)" onmouseleave="hideQualityTooltip()" data-tip-title="Coverage" data-tip-text="Measures how many schedule slots are successfully covered by at least one tutor.">
+        <strong>${quality.coverageScore}%</strong>
+        <span>Coverage</span>
+      </div>
+        <div class="quality-score-piece" onmouseenter="showQualityTooltip(event, this)" onmousemove="moveQualityTooltip(event)" onmouseleave="hideQualityTooltip()" data-tip-title="Fairness" data-tip-text="Checks whether tutor hours are distributed evenly instead of overloading only a few people.">
+        <strong>${quality.fairnessScore}%</strong>
+        <span>Fairness</span>
+      </div>
+        <div class="quality-score-piece" onmouseenter="showQualityTooltip(event, this)" onmousemove="moveQualityTooltip(event)" onmouseleave="hideQualityTooltip()" data-tip-title="Break Comfort" data-tip-text="Rewards schedules that avoid excessively long continuous work blocks without breaks.">
+        <strong>${quality.consecutiveScore}%</strong>
+        <span>Break comfort</span>
+      </div>
+        <div class="quality-score-piece" onmouseenter="showQualityTooltip(event, this)" onmousemove="moveQualityTooltip(event)" onmouseleave="hideQualityTooltip()" data-tip-title="Balance" data-tip-text="Measures how closely assigned hours match each tutor’s requested weekly hours.">
+        <strong>${quality.balancedAssignmentsScore}%</strong>
+        <span>Balance</span>
+      </div>
+        <div class="quality-score-piece" onmouseenter="showQualityTooltip(event, this)" onmousemove="moveQualityTooltip(event)" onmouseleave="hideQualityTooltip()" data-tip-title="Uncovered Slots" data-tip-text="Penalizes schedules that leave tutoring slots empty or without backup coverage.">
+        <strong>${quality.uncoveredScore}%</strong>
+        <span>Uncovered</span>
+      </div>
       </div>
     </div>
 
