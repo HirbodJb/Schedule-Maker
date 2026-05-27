@@ -781,6 +781,64 @@ input:focus,select:focus{outline:none;border-color:var(--red);box-shadow:0 0 0 3
 }
 .analysis-metric strong{display:block;font-size:20px;line-height:1;color:var(--red);font-weight:900;margin-bottom:4px}
 .analysis-metric span{font-size:11px;color:var(--muted);font-weight:800;text-transform:uppercase;letter-spacing:.03em}
+.quality-score-card{
+  background:linear-gradient(135deg,var(--red),var(--red-d));
+  color:#fff;
+  border-radius:18px;
+  padding:18px 20px;
+  margin-bottom:16px;
+  box-shadow:0 12px 30px rgba(176,58,46,.18);
+}
+.quality-score-top{
+  display:flex;
+  align-items:center;
+  gap:14px;
+  flex-wrap:wrap;
+}
+.quality-score-number{
+  font-size:44px;
+  line-height:1;
+  font-weight:900;
+  letter-spacing:-.04em;
+}
+.quality-score-label{
+  font-size:14px;
+  font-weight:900;
+}
+.quality-score-sub{
+  font-size:12px;
+  opacity:.82;
+  margin-top:3px;
+}
+.quality-score-bars{
+  display:grid;
+  grid-template-columns:repeat(5,minmax(0,1fr));
+  gap:8px;
+  margin-top:14px;
+}
+.quality-score-piece{
+  background:rgba(255,255,255,.14);
+  border:1px solid rgba(255,255,255,.18);
+  border-radius:12px;
+  padding:8px 9px;
+}
+.quality-score-piece strong{
+  display:block;
+  font-size:14px;
+  font-weight:900;
+  margin-bottom:2px;
+}
+.quality-score-piece span{
+  display:block;
+  font-size:10px;
+  font-weight:800;
+  opacity:.82;
+  text-transform:uppercase;
+  letter-spacing:.03em;
+}
+@media(max-width:900px){
+  .quality-score-bars{grid-template-columns:1fr 1fr}
+}
 .analysis-section{margin-top:16px}
 .analysis-section h4{font-size:13px;font-weight:900;margin-bottom:8px;display:flex;align-items:center;gap:7px;color:var(--ink)}
 .analysis-section h4 i{color:var(--red);font-size:15px}
@@ -4001,6 +4059,88 @@ function exportSchedulePDF(){
 }
 
 // ── Local smart schedule analysis ─────────────────────────
+
+function clampScore(value){
+  return Math.max(0, Math.min(100, Math.round(value)));
+}
+
+function calculateScheduleQuality(slots=currentSlots){
+  const totalSlots = slots.length || 1;
+  const coveredSlots = slots.filter(s=>s.assigned && s.assigned.length>0);
+  const uncoveredSlots = slots.filter(s=>!s.assigned || s.assigned.length===0);
+  const thinCoverage = slots.filter(s=>s.assigned && s.assigned.length>0 && s.assigned.length<2);
+
+  const coverageScore = clampScore((coveredSlots.length / totalSlots) * 100);
+
+  const totalDesired = tutors.reduce((sum,t)=>sum+(Number(t.hrs)||0),0) || 1;
+  const totalAssigned = tutors.reduce((sum,t)=>sum+(Number(t.assignedHrs)||0),0);
+  const balancedAssignmentsScore = clampScore(Math.min(totalAssigned / totalDesired, 1) * 100);
+
+  const activeTutors = tutors.filter(t=>Number(t.hrs)>0);
+  let fairnessScore = 100;
+  if(activeTutors.length > 1){
+    const ratios = activeTutors.map(t=>{
+      const target = Number(t.hrs)||1;
+      return Math.min((Number(t.assignedHrs)||0) / target, 1.25);
+    });
+    const avg = ratios.reduce((a,b)=>a+b,0) / ratios.length;
+    const variance = ratios.reduce((sum,r)=>sum+Math.pow(r-avg,2),0) / ratios.length;
+    const std = Math.sqrt(variance);
+    fairnessScore = clampScore(100 - (std * 85));
+  }
+
+  const maxRunSlots = MAX_CONSECUTIVE_WORK_SLOTS || 8;
+  let longestRun = 0;
+  ALL_DAYS.forEach(day=>{
+    const times = timesForDay(day);
+    tutors.forEach(tutor=>{
+      let run = 0;
+      times.forEach(time=>{
+        const slot = slots.find(s=>s.day===day && s.time===time);
+        if(slot && slot.assigned && slot.assigned.some(a=>String(a.id)===String(tutor.id))){
+          run++;
+          longestRun = Math.max(longestRun, run);
+        } else {
+          run = 0;
+        }
+      });
+    });
+  });
+  const consecutiveScore = clampScore(longestRun <= maxRunSlots ? 100 : 100 - ((longestRun - maxRunSlots) * 18));
+
+  const uncoveredScore = clampScore(100 - ((uncoveredSlots.length / totalSlots) * 100));
+  const backupPenalty = Math.min(20, Math.round((thinCoverage.length / totalSlots) * 35));
+
+  const overall = clampScore(
+    coverageScore * 0.30 +
+    fairnessScore * 0.20 +
+    consecutiveScore * 0.15 +
+    balancedAssignmentsScore * 0.20 +
+    uncoveredScore * 0.15 -
+    backupPenalty
+  );
+
+  let label = 'Needs work';
+  if(overall >= 90) label = 'Excellent';
+  else if(overall >= 80) label = 'Strong';
+  else if(overall >= 70) label = 'Good';
+  else if(overall >= 60) label = 'Needs review';
+
+  return {
+    overall,
+    label,
+    coverageScore,
+    fairnessScore,
+    consecutiveScore,
+    balancedAssignmentsScore,
+    uncoveredScore,
+    thinCoverageCount: thinCoverage.length,
+    uncoveredCount: uncoveredSlots.length,
+    longestRunSlots: longestRun
+  };
+}
+
+
 function runAIOptimize(){
   const btn=document.getElementById('ai-btn');
   const outPanel=document.getElementById('ai-out');
@@ -4029,6 +4169,7 @@ function runAIOptimize(){
   const coveredSlots=currentSlots.filter(s=>s.assigned.length>0);
   const uncoveredSlots=currentSlots.filter(s=>s.assigned.length===0);
   const thinCoverage=currentSlots.filter(s=>s.assigned.length>0 && s.assigned.length<2);
+  const quality=calculateScheduleQuality(currentSlots);
 
   const underAssigned=tutors
     .filter(t=>t.assignedHrs < t.hrs*0.75)
@@ -4125,6 +4266,8 @@ function runAIOptimize(){
     }
   });
 
+  mainFindings.unshift(`Schedule quality score: ${quality.overall}% (${quality.label}). This combines coverage, fairness, break comfort, balanced assignments, and uncovered slots.`);
+
   const textLines=[];
   textLines.push('Smart Schedule Analysis');
   textLines.push('');
@@ -4214,6 +4357,23 @@ function runAIOptimize(){
     : `<div class="analysis-empty">No very long continuous shifts detected.</div>`;
 
   const htmlReport=`
+    <div class="quality-score-card">
+      <div class="quality-score-top">
+        <div class="quality-score-number">${quality.overall}%</div>
+        <div>
+          <div class="quality-score-label">Schedule Quality: ${esc(quality.label)}</div>
+          <div class="quality-score-sub">Based on coverage, fairness, consecutive hours, balanced assignments, and uncovered slots.</div>
+        </div>
+      </div>
+      <div class="quality-score-bars">
+        <div class="quality-score-piece"><strong>${quality.coverageScore}%</strong><span>Coverage</span></div>
+        <div class="quality-score-piece"><strong>${quality.fairnessScore}%</strong><span>Fairness</span></div>
+        <div class="quality-score-piece"><strong>${quality.consecutiveScore}%</strong><span>Break comfort</span></div>
+        <div class="quality-score-piece"><strong>${quality.balancedAssignmentsScore}%</strong><span>Balance</span></div>
+        <div class="quality-score-piece"><strong>${quality.uncoveredScore}%</strong><span>Uncovered</span></div>
+      </div>
+    </div>
+
     <div class="analysis-summary">
       <div class="analysis-metric"><strong>${totalAssigned.toFixed(1)} / ${totalDesired}</strong><span>Requested hours scheduled</span></div>
       <div class="analysis-metric"><strong>${coveredSlots.length}</strong><span>Covered slots</span></div>
