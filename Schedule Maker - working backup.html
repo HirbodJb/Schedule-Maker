@@ -1,0 +1,334 @@
+<!--
+CAS ESL Schedule Builder
+Originally designed and developed by Hirbod Jabbarnezhad.
+Copyright (c) 2026 Hirbod Jabbarnezhad.
+
+Use, copying, and modification are allowed only with attribution.
+See LICENSE.txt for full terms.
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="application-name" content="CAS ESL Schedule Builder">
+<meta name="author" content="Hirbod Jabbarnezhad">
+<meta name="creator" content="Hirbod Jabbarnezhad">
+<meta name="copyright" content="Copyright (c) 2026 Hirbod Jabbarnezhad">
+<meta name="description" content="CAS ESL Schedule Builder, originally designed and developed by Hirbod Jabbarnezhad.">
+
+<title>CAS ESL Scheduler — Pierce College</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,500;0,9..40,700;0,9..40,800;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css">
+<link rel="stylesheet" href="css/styles.css">
+
+<!-- PDF export with real document metadata -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+</head>
+<body>
+
+<div id="toast-container"></div>
+<script>
+function showToast(msg, type='err', duration=4500){
+  const c=document.getElementById('toast-container');
+  const t=document.createElement('div');
+  t.className='toast '+type;
+  const icon=type==='err'?'ti-circle-x':type==='warn'?'ti-alert-triangle':'ti-circle-check';
+  t.innerHTML=`<i class="ti ${icon} toast-icon" aria-hidden="true"></i><div class="toast-body">${msg}</div><button class="toast-close" onclick="dismissToast(this.parentElement)" aria-label="Close">&times;</button>`;
+  c.appendChild(t);
+  const timer=setTimeout(()=>dismissToast(t), duration);
+  t._timer=timer;
+}
+function dismissToast(el){
+  if(!el||!el.parentElement) return;
+  clearTimeout(el._timer);
+  el.classList.add('hiding');
+  el.addEventListener('animationend',()=>el.remove(),{once:true});
+}
+function showConfirm(title, msg, onConfirm, confirmLabel='Delete', confirmClass='btn-danger'){
+  const old=document.getElementById('confirm-overlay');
+  if(old) old.remove();
+  const ov=document.createElement('div');
+  ov.id='confirm-overlay';
+  ov.innerHTML=`<div class="confirm-box">
+    <h4>${title}</h4>
+    <p>${msg}</p>
+    <div class="confirm-actions">
+      <button class="btn btn-sm" onclick="document.getElementById('confirm-overlay').remove()">Cancel</button>
+      <button class="btn btn-sm ${confirmClass}" id="confirm-ok-btn">${confirmLabel}</button>
+    </div>
+  </div>`;
+  document.body.appendChild(ov);
+  ov.addEventListener('click', e=>{ if(e.target===ov) ov.remove(); });
+  document.getElementById('confirm-ok-btn').addEventListener('click', ()=>{ ov.remove(); onConfirm(); });
+}
+</script>
+
+
+<div class="shell">
+
+  <!-- Header -->
+  <div class="hd">
+    <div class="hd-dot"></div>
+    <div>
+      <div class="hd-title">CAS ESL Schedule Builder</div>
+      <div class="hd-sub">Pierce College · Center for Academic Success</div>
+    </div>
+    <div class="hd-right">For Jamie Ray &nbsp;·&nbsp; Coordinator</div>
+  </div>
+
+  <!-- Nav -->
+  <div class="nav">
+    <button class="nb act" onclick="switchPane('upload')" id="nb-upload">
+      <i class="ti ti-upload"></i> Import Roster
+    </button>
+    <button class="nb" onclick="switchPane('tutors')" id="nb-tutors">
+      <i class="ti ti-users"></i> Roster
+      <span class="badge" id="badge-count" style="display:none">0</span>
+    </button>
+    <button class="nb" onclick="switchPane('generate')" id="nb-generate">
+      <i class="ti ti-calendar-event"></i> Schedule
+    </button>
+  </div>
+
+  <!-- ── PANE: Upload ── -->
+  <div class="pane act" id="pane-upload">
+    <div class="upload-hero" id="drop-zone">
+      <i class="ti ti-file-spreadsheet icon"></i>
+      <h2>Drop your Google Form CSV here</h2>
+      <p>Export tutor availability responses from Google Sheets as CSV, then drag and drop the file here — or click to browse.</p>
+      <input type="file" id="csv-file" accept=".csv" onchange="handleCSV(this)">
+    </div>
+
+    <div class="or-divider">or paste CSV text directly</div>
+
+    <div class="paste-box">
+<div style="background:var(--cream);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:12px">
+  <div style="font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px">
+    CSV Format Guide
+  </div>
+
+  <div style="font-size:12px;color:var(--ink);line-height:1.65">
+    Each tutor should be on a new line using this format. You do not need to type a header row:
+  </div>
+
+  <div style="margin-top:8px;background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px 12px;
+              font-family:var(--mono);font-size:11px;overflow:auto">
+    Tutor Name, Email, Phone, Desired Hours, Mode, Saturday, ENG101, Priority, Mon 9:00, Mon 9:30...
+  </div>
+
+  <div style="margin-top:10px;font-size:12px;color:var(--muted);line-height:1.65">
+    Example:
+  </div>
+
+  <div style="margin-top:6px;background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px 12px;
+              font-family:var(--mono);font-size:11px;overflow:auto">
+    Jamie Ray, jamie@laccd.edu, (818) 555-0100, 10, both, yes, yes, agree, Mon 9:00, Mon 9:30, Tue 1:00
+  </div>
+
+  <ul style="margin-top:10px;padding-left:18px;font-size:12px;color:var(--muted);line-height:1.7">
+    <li><strong>Phone:</strong> optional, but recommended</li>
+    <li><strong>Desired Hours:</strong> a number, like 8, 10, 12, or 24</li>
+    <li><strong>Mode:</strong> both, oc, or ol</li>
+    <li><strong>Saturday:</strong> yes or no</li>
+    <li><strong>ENG101:</strong> yes if completed, no if not yet</li>
+    <li><strong>Priority:</strong> agree or disagree</li>
+    <li>Separate each value with commas</li>
+    <li>Keep one tutor per line</li>
+  </ul>
+</div>
+
+      <label>Paste raw CSV</label>
+      <textarea id="csv-paste" placeholder="Jamie Ray, jamie@laccd.edu, (818) 555-0100, 10, both, yes, yes, agree, Mon 9:00, Mon 9:30"></textarea>
+      <button class="btn btn-red btn-sm" style="margin-top:10px" onclick="parseCSVText(document.getElementById('csv-paste').value)">
+        <i class="ti ti-table-import"></i> Parse CSV
+      </button>
+    </div>
+
+    <div id="import-status"></div>
+  </div>
+
+  <!-- ── PANE: Roster ── -->
+  <div class="pane" id="pane-tutors">
+
+    <!-- Add tutor form (collapsible) -->
+    <details class="add-form" id="add-details">
+      <summary>Add a missing tutor manually</summary>
+
+      <div class="form-grid two" style="margin-top:16px">
+        <div class="fg"><span class="fl">Full name <span style="color:var(--red)">*</span></span><input id="t-name" placeholder="e.g. Jamie Ray"></div>
+        <div class="fg"><span class="fl">LACCD email <span style="color:var(--red)">*</span></span><input id="t-email" placeholder="name@laccd.edu"></div>
+      </div>
+      <div class="form-grid two">
+        <div class="fg"><span class="fl">Phone number <span style="color:var(--red)">*</span></span><input id="t-phone" type="tel" placeholder="e.g. (818) 555-0100" onblur="formatPhone(this)"></div>
+        <div class="fg"><span class="fl">Completed ENG 101 / ENGL C1000?</span>
+          <select id="t-eng101">
+            <option value="yes">Yes — completed</option>
+            <option value="no">Not yet</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-grid" style="align-items:end">
+        <div class="fg"><span class="fl">Desired hrs / week</span>
+          <select id="t-hrs">
+            <option value="3">1–5 hrs</option>
+            <option value="8" selected>6–10 hrs</option>
+            <option value="12">10–15 hrs</option>
+            <option value="24">15–24 hrs (max)</option>
+          </select>
+        </div>
+        <div class="fg">
+          <span class="fl" style="line-height:1.35;text-transform:none;font-size:10px;letter-spacing:0">Hours/wk in another Pierce College position (not ESL/CAS)</span>
+          <input id="t-other" type="number" min="0" max="25" value="0" placeholder="0">
+        </div>
+        <div class="fg"><span class="fl">Mode</span>
+          <select id="t-mode">
+            <option value="both">In-person &amp; online</option>
+            <option value="oc">In-person only</option>
+            <option value="ol">Online only</option>
+          </select>
+        </div>
+        <div class="fg"><span class="fl">Saturday</span>
+          <select id="t-sat">
+            <option value="no">Not available Sat</option>
+            <option value="yes">Available Saturday</option>
+          </select>
+        </div>
+        <div class="fg"><span class="fl">Schedule stability</span>
+          <select id="t-stable">
+            <option value="stable">Stable</option>
+            <option value="maybe">May change</option>
+            <option value="tentative">Tentative</option>
+          </select>
+        </div>
+      </div>
+      <div style="background:var(--warn-bg);border:1px solid var(--warn-b);border-radius:12px;padding:13px 16px;margin-top:4px">
+        <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;margin-bottom:8px">Scheduling priority acknowledgment <span style="color:var(--red)">*</span></div>
+        <p style="font-size:12px;color:var(--ink);margin-bottom:10px;line-height:1.5">ESL tutors who are available to work in person are given scheduling priority. Do you agree with this?</p>
+        <div style="display:flex;gap:12px">
+          <label style="display:flex;align-items:center;gap:7px;font-size:13px;font-weight:700;cursor:pointer">
+            <input type="radio" name="t-priority" id="t-priority-agree" value="agree" style="width:16px;height:16px;accent-color:var(--red);flex-shrink:0"> Agree
+          </label>
+          <label style="display:flex;align-items:center;gap:7px;font-size:13px;font-weight:700;cursor:pointer">
+            <input type="radio" name="t-priority" id="t-priority-disagree" value="disagree" style="width:16px;height:16px;accent-color:var(--red);flex-shrink:0"> Disagree
+          </label>
+        </div>
+      </div>
+
+      <div style="font-size:11px;font-weight:700;color:var(--muted);margin:14px 0 6px;text-transform:uppercase;letter-spacing:.03em">
+        Availability — M–Th 9am–5pm · Fri 10am–2pm
+      </div>
+      <div class="avail-wrap">
+        <table class="avail-table" id="avail-tbl"></table>
+      </div>
+
+      <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-red" onclick="addTutor()"><i class="ti ti-plus"></i> Add to roster</button>
+        <button class="btn btn-sm" onclick="selectAll()">Select all</button>
+        <button class="btn btn-sm" onclick="clearAvail()">Clear</button>
+      </div>
+    </details>
+
+    <!-- Roster list -->
+    <div class="roster-toolbar">
+      <h3 id="roster-heading">Roster</h3>
+      <div class="roster-search" id="roster-search-wrap" style="display:none">
+        <i class="ti ti-search"></i>
+        <input id="roster-search-input" type="search" placeholder="Search name, email, or phone…" oninput="handleRosterSearchInput()" onkeydown="if(event.key==='Enter') searchRoster()">
+        <button type="button" onclick="searchRoster()" title="Search roster" aria-label="Search roster"><i class="ti ti-arrow-right"></i></button>
+        <span class="search-count" id="roster-search-count"></span>
+        <button type="button" class="search-nav-btn" id="roster-prev-btn" onclick="moveRosterSearch(-1)" title="Previous result" aria-label="Previous result"><i class="ti ti-chevron-left"></i></button>
+        <button type="button" class="search-nav-btn" id="roster-next-btn" onclick="moveRosterSearch(1)" title="Next result" aria-label="Next result"><i class="ti ti-chevron-right"></i></button>
+      </div>
+      <button class="btn btn-sm" onclick="switchPane('generate')" id="go-gen-btn" style="display:none">
+        <i class="ti ti-calendar-event"></i> Go to Schedule →
+      </button>
+      <button class="btn btn-sm btn-danger" onclick="clearAll()" id="clear-all-btn" style="display:none">
+        <i class="ti ti-trash"></i> Clear &amp; start over
+      </button>
+    </div>
+    <div id="tutor-list">
+      <div class="empty">No tutors yet — import a CSV or add one manually above.</div>
+    </div>
+  </div>
+
+  <!-- ── PANE: Generate ── -->
+  <div class="pane" id="pane-generate">
+
+    <div class="stat-row">
+      <div class="stat"><div class="stat-n" id="st-tutors">0</div><div class="stat-l">Tutors</div></div>
+      <div class="stat"><div class="stat-n" id="st-hrs">0</div><div class="stat-l">Scheduled hrs/wk</div></div>
+      <div class="stat"><div class="stat-n" id="st-slots">—</div><div class="stat-l">Covered slots</div></div>
+      <div class="stat"><div class="stat-n" id="st-gaps">—</div><div class="stat-l">Uncovered slots</div></div>
+    </div>
+
+    <div class="schedule-settings" aria-label="Schedule settings">
+      <div class="fg">
+        <span class="fl">Weekly hour budget</span>
+        <input id="schedule-budget" type="number" min="0" step="0.5" placeholder="e.g. 20" oninput="syncScheduleSettingsFromInputs()">
+      </div>
+      <div class="fg">
+        <span class="fl">Schedule from</span>
+        <input id="schedule-date-from" type="date" onchange="syncScheduleSettingsFromInputs()">
+      </div>
+      <div class="fg">
+        <span class="fl">Schedule to</span>
+        <input id="schedule-date-to" type="date" onchange="syncScheduleSettingsFromInputs()">
+      </div>
+      <div class="setting-note" id="schedule-settings-note">
+        Optional: set a weekly budget so generated tutor hours do not exceed that total. The 4-hour continuous-work limit is still enforced with a required 30-minute break before more work.
+      </div>
+      <div class="schedule-validation-error" id="schedule-validation-error">
+        <i class="ti ti-alert-triangle"></i> <span id="schedule-validation-message"></span>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap">
+      <button class="btn btn-red" onclick="generateSchedule()" id="gen-btn">
+        <i class="ti ti-sparkles"></i> Generate schedule
+      </button>
+      <button class="btn" onclick="switchPane('tutors')">
+        <i class="ti ti-users"></i> Back to roster
+      </button>
+      <button class="btn" onclick="saveProject()" title="Save this roster and schedule as a project file">
+        <i class="ti ti-device-floppy"></i> Save Project
+      </button>
+      <button class="btn" onclick="document.getElementById('project-load-file').click()" title="Load a previously saved project file">
+        <i class="ti ti-folder-open"></i> Load Project
+      </button>
+      <input type="file" id="project-load-file" accept=".json,application/json" style="display:none" onchange="handleProjectFile(this)">
+      <button class="btn" onclick="undoLastAction()" id="schedule-undo-btn" style="display:none">
+        <i class="ti ti-arrow-back-up"></i> Undo
+      </button>
+      <div class="schedule-search" id="schedule-search-wrap">
+        <i class="ti ti-search"></i>
+        <input id="schedule-search-input" type="search" placeholder="Search first or last name…" oninput="handleScheduleSearchInput()" onkeydown="if(event.key==='Enter') searchScheduleName()">
+        <button type="button" onclick="searchScheduleName()" title="Search schedule" aria-label="Search schedule"><i class="ti ti-arrow-right"></i></button>
+        <span class="search-count" id="schedule-search-count"></span>
+        <button type="button" class="search-nav-btn" id="schedule-prev-btn" onclick="moveScheduleSearch(-1)" title="Previous result" aria-label="Previous result"><i class="ti ti-chevron-left"></i></button>
+        <button type="button" class="search-nav-btn" id="schedule-next-btn" onclick="moveScheduleSearch(1)" title="Next result" aria-label="Next result"><i class="ti ti-chevron-right"></i></button>
+      </div>
+      <button class="btn btn-danger" onclick="clearAll()">
+        <i class="ti ti-trash"></i> Clear &amp; start over
+      </button>
+    </div>
+
+    <div id="gen-out"></div>
+  </div>
+</div><!-- /shell -->
+
+<button class="about-credit-btn" onclick="openAboutModal()">Made by Hirbod Jabbarnezhad · About</button>
+
+
+<button class="undo-float-btn" id="undo-btn" onclick="undoLastAction()" title="Undo last action" aria-label="Undo last action">
+  <i class="ti ti-arrow-back-up"></i> <span id="undo-btn-label">Undo</span>
+</button>
+
+<button class="scroll-top-btn" id="scroll-top-btn" onclick="scrollActivePaneToTop()" title="Back to top" aria-label="Back to top">
+  <i class="ti ti-arrow-up"></i>
+</button>
+<script src="js/app.js"></script>
+</body>
+</html>
