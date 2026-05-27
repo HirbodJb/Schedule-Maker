@@ -297,6 +297,52 @@ input:focus,select:focus{outline:none;border-color:var(--red);box-shadow:0 0 0 3
 .pill-merged{border-radius:8px;padding:5px 7px;margin:2px 0;font-size:11px;font-weight:800;display:block;line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;box-shadow:0 2px 5px rgba(0,0,0,.08);border-left:3px solid rgba(0,0,0,.15)}
 .pill-time{display:block;font-size:9px;font-weight:600;opacity:.72;margin-top:2px}
 
+/* ── Tutor hover quick summary ───────────────────────── */
+.tutor-hover-card{
+  position:fixed;
+  z-index:100010;
+  pointer-events:none;
+  min-width:190px;
+  background:#fff;
+  color:var(--ink);
+  border:1px solid var(--line-s);
+  border-radius:14px;
+  box-shadow:0 16px 42px rgba(30,22,20,.22);
+  padding:11px 12px;
+  font-size:12px;
+  line-height:1.45;
+  opacity:0;
+  transform:translateY(6px) scale(.98);
+  transition:opacity .12s ease,transform .12s ease;
+}
+.tutor-hover-card.show{
+  opacity:1;
+  transform:translateY(0) scale(1);
+}
+.tutor-hover-title{
+  font-size:13px;
+  font-weight:900;
+  margin-bottom:6px;
+  color:var(--ink);
+}
+.tutor-hover-row{
+  display:flex;
+  justify-content:space-between;
+  gap:12px;
+  border-top:1px solid var(--line);
+  padding-top:5px;
+  margin-top:5px;
+}
+.tutor-hover-label{
+  color:var(--muted);
+  font-weight:700;
+}
+.tutor-hover-value{
+  color:var(--ink);
+  font-weight:900;
+  text-align:right;
+}
+
 /* ─────────────────────────────────────────────
    SHIFT EDITING / MOVE MODE
 ───────────────────────────────────────────── */
@@ -2258,6 +2304,7 @@ document.addEventListener('click', e=>{
 });
 
 function openShiftPopover(event,tutorId,day,time){
+  hideTutorQuickSummary();
   event.stopPropagation();
 
   // Important fix:
@@ -3502,6 +3549,90 @@ function paintUncoveredCells(){
 }
 
 
+
+function tutorModeLabel(tutor){
+  if(!tutor) return '—';
+  if(tutor.mode === 'ol') return 'Online';
+  if(tutor.mode === 'oc') return 'In-person';
+  return 'In-person & online';
+}
+
+function tutorModeShort(tutor){
+  if(!tutor) return '';
+  return tutor.mode === 'ol' ? 'OL' : 'OC';
+}
+
+function tutorAvailabilityCount(tutor){
+  if(!tutor || !tutor.avail) return 0;
+  return Object.values(tutor.avail).filter(v=>v===true).length;
+}
+
+function ensureTutorHoverCard(){
+  let card = document.getElementById('tutor-hover-card');
+  if(!card){
+    card = document.createElement('div');
+    card.id = 'tutor-hover-card';
+    card.className = 'tutor-hover-card';
+    document.body.appendChild(card);
+  }
+  return card;
+}
+
+function positionTutorHoverCard(event){
+  const card = ensureTutorHoverCard();
+  const pad = 14;
+  let x = event.clientX + pad;
+  let y = event.clientY + pad;
+
+  const rect = card.getBoundingClientRect();
+  if(x + rect.width > window.innerWidth - 10) x = event.clientX - rect.width - pad;
+  if(y + rect.height > window.innerHeight - 10) y = event.clientY - rect.height - pad;
+
+  card.style.left = Math.max(10, x) + 'px';
+  card.style.top = Math.max(10, y) + 'px';
+}
+
+function showTutorQuickSummary(event, tutorId){
+  const tutor = getTutorById(tutorId);
+  if(!tutor) return;
+
+  const card = ensureTutorHoverCard();
+  const assigned = Number(tutor.assignedHrs || 0);
+  const target = Number(tutor.hrs || 0);
+  const modeShort = tutorModeShort(tutor);
+  const availabilitySlots = tutorAvailabilityCount(tutor);
+
+  card.innerHTML = `
+    <div class="tutor-hover-title">${escapeHtml(tutor.name)} ${modeShort}</div>
+    <div class="tutor-hover-row">
+      <span class="tutor-hover-label">Assigned</span>
+      <span class="tutor-hover-value">${assigned.toFixed(1)} / ${target} hrs</span>
+    </div>
+    <div class="tutor-hover-row">
+      <span class="tutor-hover-label">Mode</span>
+      <span class="tutor-hover-value">${escapeHtml(tutorModeLabel(tutor))}</span>
+    </div>
+    <div class="tutor-hover-row">
+      <span class="tutor-hover-label">Availability slots</span>
+      <span class="tutor-hover-value">${availabilitySlots}</span>
+    </div>
+  `;
+
+  positionTutorHoverCard(event);
+  requestAnimationFrame(()=>card.classList.add('show'));
+}
+
+function moveTutorQuickSummary(event){
+  const card = document.getElementById('tutor-hover-card');
+  if(card && card.classList.contains('show')) positionTutorHoverCard(event);
+}
+
+function hideTutorQuickSummary(){
+  const card = document.getElementById('tutor-hover-card');
+  if(card) card.classList.remove('show');
+}
+
+
 function renderOutput(slots){
   currentSlots = slots;
   const slotMap={};
@@ -3602,13 +3733,13 @@ function renderOutput(slots){
           // continuation row — show a faint continuation indicator, not a full pill
           const editClass=moveMode&&String(moveMode.tutorId)===String(tt.id)&&moveMode.day===day&&moveMode.time===t?' move-source':'';
           const focusClass=focusedTutorId?(String(focusedTutorId)===String(tt.id)?' focus-match':' focus-nonmatch'):'';
-          pills+=`<span class="pill${editClass}${focusClass}" onclick="openShiftPopover(event,${tt.id},'${day}','${t}')" style="background:${c.bg};color:${c.text};border:1px dashed ${c.border};opacity:.72;font-size:9px;">${tt.name.split(' ')[0]} ···</span>`;
+          pills+=`<span class="pill${editClass}${focusClass}" onmouseenter="showTutorQuickSummary(event,${tt.id})" onmousemove="moveTutorQuickSummary(event)" onmouseleave="hideTutorQuickSummary()" onclick="openShiftPopover(event,${tt.id},'${day}','${t}')" style="background:${c.bg};color:${c.text};border:1px dashed ${c.border};opacity:.72;font-size:9px;">${tt.name.split(' ')[0]} ···</span>`;
           return;
         }
 
         const editClass=moveMode&&String(moveMode.tutorId)===String(tt.id)&&moveMode.day===day&&moveMode.time===t?' move-source':'';
         const focusClass=focusedTutorId?(String(focusedTutorId)===String(tt.id)?' focus-match':' focus-nonmatch'):'';
-        pills+=`<span class="${pillClass}${editClass}${focusClass}" onclick="openShiftPopover(event,${tt.id},'${day}','${t}')" style="background:${c.bg};color:${c.text};border:1.5px solid ${c.border}">${tt.name.split(' ')[0]} ${mode}${timeLabel}</span>`;
+        pills+=`<span class="${pillClass}${editClass}${focusClass}" onmouseenter="showTutorQuickSummary(event,${tt.id})" onmousemove="moveTutorQuickSummary(event)" onmouseleave="hideTutorQuickSummary()" onclick="openShiftPopover(event,${tt.id},'${day}','${t}')" style="background:${c.bg};color:${c.text};border:1.5px solid ${c.border}">${tt.name.split(' ')[0]} ${mode}${timeLabel}</span>`;
       });
 
       html+=`<td class="${cellClass}" onclick="handleScheduleCellClick('${day}','${t}')">${pills}</td>`;
