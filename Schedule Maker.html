@@ -3820,7 +3820,7 @@ function exportSchedulePDF(){
   doc.setFont('helvetica','normal');
   doc.setFontSize(10);
   doc.text('Pierce College · Center for Academic Success', 40, 58);
-  doc.text(`Created by ${metadata.createdBy} · ${metadata.software} v${metadata.version}`, 40, 73);
+  doc.text(`${metadata.software} v${metadata.version}`, 40, 73);
   doc.text(`Period: ${schedulePeriodText()}${scheduleSettings.weeklyBudget?` · Weekly budget: ${scheduleSettings.weeklyBudget.toFixed(1)} hours`:''}`, 40, 88);
 
   const head = [rows[0]];
