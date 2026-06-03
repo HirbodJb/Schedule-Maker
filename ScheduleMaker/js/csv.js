@@ -1,4 +1,5 @@
 // ── CSV Import & Drag-and-Drop ──────────────────────────────
+function handleCSV(input){
   const file = input.files[0];
   if(!file) return;
   const reader = new FileReader();

@@ -150,5 +150,3 @@ function showStatus(containerId, msg, type){
 }
 
 // ── Status helper ────────────────────────────────────────
-// ── CSV import ───────────────────────────────────────────
-function handleCSV(input){
