@@ -3662,6 +3662,16 @@ function tutorModeShort(tutor){
   return tutor.mode === 'ol' ? 'OL' : 'OC';
 }
 
+function displayModeShortForDay(tutor, day){
+  if(day === 'Friday') return 'OL';
+  return tutorModeShort(tutor);
+}
+
+function displayModeLabelForDay(tutor, day){
+  if(day === 'Friday') return 'Online';
+  return tutorModeLabel(tutor);
+}
+
 function tutorAvailabilityCount(tutor){
   if(!tutor || !tutor.avail) return 0;
   return Object.values(tutor.avail).filter(v=>v===true).length;
@@ -3692,14 +3702,15 @@ function positionTutorHoverCard(event){
   card.style.top = Math.max(10, y) + 'px';
 }
 
-function showTutorQuickSummary(event, tutorId){
+function showTutorQuickSummary(event, tutorId, day=null){
   const tutor = getTutorById(tutorId);
   if(!tutor) return;
 
   const card = ensureTutorHoverCard();
   const assigned = Number(tutor.assignedHrs || 0);
   const target = Number(tutor.hrs || 0);
-  const modeShort = tutorModeShort(tutor);
+  const modeShort = day ? displayModeShortForDay(tutor, day) : tutorModeShort(tutor);
+  const modeLabel = day ? displayModeLabelForDay(tutor, day) : tutorModeLabel(tutor);
   const availabilitySlots = tutorAvailabilityCount(tutor);
 
   card.innerHTML = `
@@ -3710,7 +3721,7 @@ function showTutorQuickSummary(event, tutorId){
     </div>
     <div class="tutor-hover-row">
       <span class="tutor-hover-label">Mode</span>
-      <span class="tutor-hover-value">${escapeHtml(tutorModeLabel(tutor))}</span>
+      <span class="tutor-hover-value">${escapeHtml(modeLabel)}</span>
     </div>
     <div class="tutor-hover-row">
       <span class="tutor-hover-label">Availability slots</span>
@@ -3784,7 +3795,7 @@ function renderOutput(slots){
   html+='<div class="split">';
 
   // ── Left: grid ──
-  html+=`<div class="panel ${focusedTutorId?'focus-mode':''}"><div class="panel-title">Weekly schedule grid</div><div class="schedule-period-label"><i class="ti ti-calendar-time"></i> ${escapeHtml(schedulePeriodText())}${scheduleSettings.weeklyBudget?` · Weekly budget: ${scheduleSettings.weeklyBudget.toFixed(1)}h`:''}</div><div class="sched-wrap"><table class="sched-table">`;
+  html+=`<div class="panel ${focusedTutorId?'focus-mode':''}"><div class="panel-title">Weekly schedule grid</div><div class="schedule-period-label"><i class="ti ti-calendar-time"></i> ${escapeHtml(schedulePeriodText())}${scheduleSettings.weeklyBudget?` · Weekly budget: ${scheduleSettings.weeklyBudget.toFixed(1)}h`:''} · Friday shifts display as online</div><div class="sched-wrap"><table class="sched-table">`;
   html+='<thead><tr><th style="width:92px">Time</th>';
   ALL_DAYS.forEach(d=>html+=`<th>${d}</th>`);
   html+='</tr></thead><tbody>';
@@ -3820,7 +3831,7 @@ function renderOutput(slots){
       let pills='';
       assignedHere.forEach(tt=>{
         const c=colorFor(tutors.findIndex(x=>String(x.id)===String(tt.id)));
-        const mode=tt.mode==='ol'?'OL':'OC';
+        const mode=displayModeShortForDay(tt, day);
         const info=shiftInfo[day+'-'+t+'-'+tt.id];
         const isMerged=info&&info.runLen>1;
         const pillClass=isMerged?'pill-merged':'pill';
@@ -3833,13 +3844,13 @@ function renderOutput(slots){
           // continuation row — show a faint continuation indicator, not a full pill
           const editClass=moveMode&&String(moveMode.tutorId)===String(tt.id)&&moveMode.day===day&&moveMode.time===t?' move-source':'';
           const focusClass=focusedTutorId?(String(focusedTutorId)===String(tt.id)?' focus-match':' focus-nonmatch'):'';
-          pills+=`<span class="pill${editClass}${focusClass}" onmouseenter="showTutorQuickSummary(event,${tt.id})" onmousemove="moveTutorQuickSummary(event)" onmouseleave="hideTutorQuickSummary()" onclick="openShiftPopover(event,${tt.id},'${day}','${t}')" style="background:${c.bg};color:${c.text};border:1px dashed ${c.border};opacity:.72;font-size:9px;">${tt.name.split(' ')[0]} ···</span>`;
+          pills+=`<span class="pill${editClass}${focusClass}" onmouseenter="showTutorQuickSummary(event,${tt.id},'${day}')" onmousemove="moveTutorQuickSummary(event)" onmouseleave="hideTutorQuickSummary()" onclick="openShiftPopover(event,${tt.id},'${day}','${t}')" style="background:${c.bg};color:${c.text};border:1px dashed ${c.border};opacity:.72;font-size:9px;">${tt.name.split(' ')[0]} ···</span>`;
           return;
         }
 
         const editClass=moveMode&&String(moveMode.tutorId)===String(tt.id)&&moveMode.day===day&&moveMode.time===t?' move-source':'';
         const focusClass=focusedTutorId?(String(focusedTutorId)===String(tt.id)?' focus-match':' focus-nonmatch'):'';
-        pills+=`<span class="${pillClass}${editClass}${focusClass}" onmouseenter="showTutorQuickSummary(event,${tt.id})" onmousemove="moveTutorQuickSummary(event)" onmouseleave="hideTutorQuickSummary()" onclick="openShiftPopover(event,${tt.id},'${day}','${t}')" style="background:${c.bg};color:${c.text};border:1.5px solid ${c.border}">${tt.name.split(' ')[0]} ${mode}${timeLabel}</span>`;
+        pills+=`<span class="${pillClass}${editClass}${focusClass}" onmouseenter="showTutorQuickSummary(event,${tt.id},'${day}')" onmousemove="moveTutorQuickSummary(event)" onmouseleave="hideTutorQuickSummary()" onclick="openShiftPopover(event,${tt.id},'${day}','${t}')" style="background:${c.bg};color:${c.text};border:1.5px solid ${c.border}">${tt.name.split(' ')[0]} ${mode}${timeLabel}</span>`;
       });
 
       html+=`<td class="${cellClass}" onclick="handleScheduleCellClick('${day}','${t}')">${pills}</td>`;
@@ -3937,7 +3948,7 @@ function scheduleExportRows(){
       }
 
       const names = slot.assigned.map(t => {
-        const mode = t.mode==='ol' ? 'OL' : 'OC';
+        const mode = displayModeShortForDay(t, day);
         return `${t.name} ${mode}`;
       }).join(' | ');
 
