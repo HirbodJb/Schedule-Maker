@@ -114,12 +114,20 @@ function switchPane(name){
     applyScheduleSettingsToInputs();
     updateScheduleStats();
   }
+  if(name==='cet'){
+    renderCET();
+    const badge = document.getElementById('cet-badge');
+    if(badge){
+      badge.textContent = cetClasses.length;
+      badge.style.display = cetClasses.length ? 'inline' : 'none';
+    }
+  }
 }
 
 function updateScrollTopButton(activePane){
   const btn = document.getElementById('scroll-top-btn');
   if(!btn) return;
-  btn.classList.toggle('show', activePane==='tutors' || activePane==='generate');
+  btn.classList.toggle('show', activePane==='tutors' || activePane==='generate' || activePane==='cet');
 }
 
 function scrollActivePaneToTop(){

@@ -1,0 +1,197 @@
+/* ══════════════════════════════════════════════════════════════
+   CET (Course Embedded Tutor) styles
+   Add to main.css
+   ══════════════════════════════════════════════════════════════ */
+
+/* ── CET pane layout ──────────────────────────────────────── */
+.cet-toolbar{
+  display:flex;align-items:center;gap:12px;
+  margin-bottom:18px;flex-wrap:wrap;
+}
+.cet-toolbar-left{display:flex;align-items:center;gap:10px;flex:1}
+.cet-toolbar-right{display:flex;gap:8px;flex-shrink:0}
+.cet-heading{font-size:16px;font-weight:800}
+.cet-count-badge{
+  background:var(--red-l);color:var(--red-d);
+  border:1px solid var(--red-b);border-radius:999px;
+  font-size:11px;font-weight:700;padding:3px 10px;
+}
+
+.cet-split{
+  display:grid;
+  grid-template-columns:1fr 280px;
+  gap:16px;
+  align-items:start;
+}
+
+@media(max-width:900px){
+  .cet-split{grid-template-columns:1fr}
+}
+
+/* ── Class list column ───────────────────────────────────── */
+.cet-classes-col{display:flex;flex-direction:column;gap:10px}
+.cet-group-label{
+  font-size:11px;font-weight:800;text-transform:uppercase;
+  letter-spacing:.04em;color:var(--muted);margin-bottom:2px;
+}
+
+/* ── Class card ──────────────────────────────────────────── */
+.cet-class-card{
+  background:#fff;
+  border:1px solid var(--line);
+  border-radius:14px;
+  padding:14px 16px;
+  transition:box-shadow .15s, opacity .2s, border-color .2s;
+}
+.cet-class-card:hover{box-shadow:0 4px 18px rgba(30,22,20,.09)}
+
+.cet-class-card.cet-dimmed{
+  opacity:.35;
+  filter:grayscale(.5);
+  pointer-events:none;
+}
+.cet-class-card.cet-highlighted{
+  border-color:#27a85f;
+  box-shadow:0 0 0 2.5px rgba(39,168,95,.22), 0 6px 22px rgba(39,168,95,.12);
+  background:#f2fbf5;
+}
+.cet-class-card.cet-no-cet{
+  background:var(--cream);
+  border-style:dashed;
+}
+
+.cet-card-top{
+  display:flex;align-items:flex-start;
+  justify-content:space-between;gap:8px;
+  margin-bottom:8px;
+}
+.cet-card-title{display:flex;align-items:baseline;gap:8px;flex:1;min-width:0;flex-wrap:wrap}
+.cet-course-code{
+  font-size:12px;font-weight:800;
+  background:var(--soft);color:var(--muted);
+  border-radius:6px;padding:2px 8px;
+  white-space:nowrap;
+}
+.cet-course-title{font-size:14px;font-weight:800;color:var(--ink)}
+.cet-card-actions{display:flex;gap:5px;flex-shrink:0}
+
+.cet-card-meta{
+  display:flex;flex-wrap:wrap;gap:5px;
+  margin-bottom:8px;
+}
+.cet-meta-chip{
+  display:inline-flex;align-items:center;gap:4px;
+  font-size:11px;font-weight:600;color:var(--muted);
+  background:var(--cream);border:1px solid var(--line);
+  border-radius:999px;padding:2px 8px;
+}
+.cet-meta-chip i{font-size:12px}
+
+.cet-hours-breakdown{
+  display:flex;gap:6px;flex-wrap:wrap;
+  margin-bottom:8px;
+}
+.cet-hrs-chip{
+  font-size:11px;font-weight:700;
+  border-radius:999px;padding:2px 9px;
+}
+.cet-hrs-class{background:#e6f1fb;color:#0c447c;border:1px solid #b5d4f4}
+.cet-hrs-sg{background:#eaf3de;color:#27500a;border:1px solid #c0dd97}
+
+/* ── Assign row ──────────────────────────────────────────── */
+.cet-assign-row{
+  display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  padding-top:8px;border-top:1px solid var(--line);
+}
+.cet-assign-controls{display:flex;align-items:center;gap:6px;flex:1;min-width:0}
+.cet-tutor-select{
+  flex:1;min-width:0;font-size:12px;
+  border:1px solid var(--line-s);border-radius:9px;
+  padding:6px 10px;background:#fff;
+}
+.cet-tutor-select:focus{border-color:var(--red);outline:none;box-shadow:0 0 0 3px rgba(176,58,46,.1)}
+
+.cet-assigned-pill{
+  display:inline-flex;align-items:center;gap:7px;
+  border-radius:999px;padding:4px 12px 4px 6px;
+  font-size:12px;font-weight:800;
+}
+.cet-assigned-hrs{
+  font-size:10px;font-weight:600;opacity:.75;
+  margin-left:4px;
+}
+
+/* ── Tutor sidebar ───────────────────────────────────────── */
+.cet-tutor-col .panel{position:sticky;top:16px}
+
+.cet-tutor-row{
+  display:flex;align-items:center;gap:10px;
+  padding:10px 8px;border-radius:11px;
+  cursor:pointer;transition:background .12s, box-shadow .12s;
+  border:1.5px solid transparent;
+  margin-bottom:4px;
+}
+.cet-tutor-row:hover{background:var(--soft)}
+.cet-tutor-row.cet-tutor-focused{
+  background:var(--red-l);
+  border-color:var(--red-b);
+  box-shadow:0 0 0 2px rgba(176,58,46,.12);
+}
+.cet-focused-badge{
+  font-size:9px;font-weight:800;text-transform:uppercase;
+  letter-spacing:.04em;color:var(--red-d);
+  background:var(--red-l);border:1px solid var(--red-b);
+  border-radius:999px;padding:2px 7px;flex-shrink:0;
+}
+
+/* ── Day checkboxes in modal ─────────────────────────────── */
+.cet-day-checkboxes{
+  display:flex;gap:8px;flex-wrap:wrap;
+}
+.cet-day-label{
+  display:flex;align-items:center;gap:5px;
+  font-size:13px;font-weight:700;cursor:pointer;
+  background:var(--cream);border:1px solid var(--line-s);
+  border-radius:8px;padding:5px 10px;
+  transition:background .12s,border-color .12s;
+  user-select:none;
+}
+.cet-day-label:has(input:checked){
+  background:var(--red-l);border-color:var(--red-b);color:var(--red-d);
+}
+.cet-day-label input{accent-color:var(--red)}
+
+/* ── CET modal ───────────────────────────────────────────── */
+.cet-modal-overlay{
+  position:fixed;inset:0;z-index:900;
+  background:rgba(30,22,20,.45);
+  display:flex;align-items:center;justify-content:center;
+  padding:20px;
+  animation:fadeIn .15s ease;
+}
+.cet-modal{
+  background:#fff;border-radius:20px;
+  width:min(700px,100%);
+  max-height:90vh;overflow-y:auto;
+  box-shadow:0 24px 64px rgba(30,22,20,.22);
+  display:flex;flex-direction:column;
+}
+.cet-modal-header{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:18px 22px 14px;border-bottom:1px solid var(--line);
+  position:sticky;top:0;background:#fff;z-index:1;border-radius:20px 20px 0 0;
+}
+.cet-modal-header h3{font-size:16px;font-weight:800}
+.cet-modal-close{
+  width:32px;height:32px;border-radius:50%;border:none;
+  background:var(--soft);font-size:18px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  color:var(--muted);transition:background .12s;
+}
+.cet-modal-close:hover{background:var(--line)}
+.cet-modal-body{padding:18px 22px}
+.cet-modal-footer{
+  display:flex;justify-content:flex-end;gap:8px;
+  padding:14px 22px 18px;border-top:1px solid var(--line);
+  position:sticky;bottom:0;background:#fff;border-radius:0 0 20px 20px;
+}
