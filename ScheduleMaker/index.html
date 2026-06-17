@@ -55,12 +55,12 @@ See LICENSE.txt for full terms.
       <i class="ti ti-users"></i> Roster
       <span class="badge" id="badge-count" style="display:none">0</span>
     </button>
-    <button class="nb" onclick="switchPane('generate')" id="nb-generate">
-      <i class="ti ti-calendar-event"></i> Schedule
-    </button>
     <button class="nb" onclick="switchPane('cet')" id="nb-cet">
       <i class="ti ti-school"></i> CET
       <span class="badge" id="cet-badge" style="display:none">0</span>
+    </button>
+    <button class="nb" onclick="switchPane('generate')" id="nb-generate">
+      <i class="ti ti-calendar-event"></i> Schedule
     </button>
   </div>
 
@@ -214,8 +214,8 @@ See LICENSE.txt for full terms.
         <button type="button" class="search-nav-btn" id="roster-prev-btn" onclick="moveRosterSearch(-1)" title="Previous result" aria-label="Previous result"><i class="ti ti-chevron-left"></i></button>
         <button type="button" class="search-nav-btn" id="roster-next-btn" onclick="moveRosterSearch(1)" title="Next result" aria-label="Next result"><i class="ti ti-chevron-right"></i></button>
       </div>
-      <button class="btn btn-sm" onclick="switchPane('generate')" id="go-gen-btn" style="display:none">
-        <i class="ti ti-calendar-event"></i> Go to Schedule →
+      <button class="btn btn-sm" onclick="switchPane('cet')" id="go-gen-btn" style="display:none">
+        <i class="ti ti-school"></i> Go to CET →
       </button>
       <button class="btn btn-sm btn-danger" onclick="clearAll()" id="clear-all-btn" style="display:none">
         <i class="ti ti-trash"></i> Clear &amp; start over
