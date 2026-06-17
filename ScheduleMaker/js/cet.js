@@ -872,6 +872,31 @@ function formatCETHours(h){
   return `${n.toFixed(n % 1 ? 1 : 0)}h`;
 }
 
+function tutorHasAnyAvailabilityDuringClass(tutor, cls){
+  normalizeCETClass(cls);
+  if(!tutor || !cls || !cls.wantsCET) return false;
+
+  // Async or incomplete class info should not be treated as impossible.
+  // In focus mode, keep these as possible so Jamie can still inspect/assign them.
+  if(cls.modality === 'async') return true;
+  if(!Array.isArray(cls.days) || !cls.days.length) return true;
+  if(!cls.startTime || !cls.endTime) return true;
+
+  const start = timeToMins(cls.startTime);
+  const end = timeToMins(cls.endTime);
+  if(end <= start) return true;
+
+  for(const day of cls.days){
+    for(let m = start; m < end; m += 30){
+      if(tutor.avail && tutor.avail[slotKeyFor(day, m)] === true){
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
 function cetAssignmentTimeLabel(a){
   return `${(a.days||[]).map(d=>d.slice(0,3)).join(', ')} · ${fmtTime(a.startTime)}–${fmtTime(a.endTime)}`;
 }
@@ -961,7 +986,7 @@ function renderCET(){
   }
   html += `</div>`;
 
-  html += `<div class="cet-tutor-col"><div class="panel"><div class="panel-title" style="margin-bottom:12px">Tutors <span style="font-size:11px;font-weight:500;color:var(--muted)">· click to highlight assigned classes</span></div>`;
+  html += `<div class="cet-tutor-col"><div class="panel"><div class="panel-title" style="margin-bottom:12px">Tutors <span style="font-size:11px;font-weight:500;color:var(--muted)">· click to highlight possible classes</span></div>`;
   if(!hasTutors){
     html += `<div style="font-size:12px;color:var(--muted);padding:8px 0">No tutors in roster yet.</div>`;
   } else {
@@ -994,11 +1019,20 @@ function renderCET(){
 function renderClassCard(cls){
   normalizeCETClass(cls);
   const assignments = cls.assignments || [];
-  let dimmed = false;
-  if(cetFocusedTutorId){
-    dimmed = !assignments.some(a => String(a.tutorId) === String(cetFocusedTutorId));
-  }
-  const highlighted = cetFocusedTutorId && assignments.some(a => String(a.tutorId) === String(cetFocusedTutorId));
+
+  // Focus mode behavior:
+  // - If the focused tutor is already assigned to this class, highlight it.
+  // - If the focused tutor is not assigned yet, highlight classes they could potentially take
+  //   based on ANY overlap with their marked availability.
+  // - Classes completely outside their availability are dimmed.
+  const focusedTutor = cetFocusedTutorId ? tutors.find(t => String(t.id) === String(cetFocusedTutorId)) : null;
+  const focusedAlreadyAssigned = focusedTutor && assignments.some(a => String(a.tutorId) === String(focusedTutor.id));
+  const focusedHasPossibleTime = focusedTutor ? tutorHasAnyAvailabilityDuringClass(focusedTutor, cls) : false;
+  const focusedHasHoursLeft = focusedTutor ? tutorCETRemainingHrs(focusedTutor) > 0 : false;
+  const focusedPotential = !!(focusedTutor && cls.wantsCET && focusedHasHoursLeft && focusedHasPossibleTime);
+
+  const highlighted = !!(focusedTutor && (focusedAlreadyAssigned || focusedPotential));
+  const dimmed = !!(focusedTutor && !highlighted);
 
   const modalityIcon = {'in-person':'ti-building','online-live':'ti-video','async':'ti-clock-off'}[cls.modality] || 'ti-school';
   const modalityLabel = {'in-person':'In-person','online-live':'Online – live Zoom','async':'Asynchronous'}[cls.modality] || cls.modality;
