@@ -57,6 +57,20 @@ function tutorCETHrs(tutor){
     .reduce((s, c) => s + (c.hrsPerWeek || 0), 0);
 }
 
+function classContactHours(cls){
+  const total = Number(cls.hrsPerWeek || 0);
+  const hasStudyGroup = cls.requiresStudyGroup !== false;
+  return Math.max(0, total - (hasStudyGroup ? 1 : 0));
+}
+
+function studyGroupHours(cls){
+  return cls.requiresStudyGroup === false ? 0 : 1;
+}
+
+function studyGroupLabel(cls){
+  return cls.requiresStudyGroup === false ? 'No study group' : `+1h study group (${cls.studyGroupMode||'TBD'})`;
+}
+
 // ── Render main CET pane ─────────────────────────────────────
 
 function renderCET(){
@@ -209,8 +223,8 @@ function renderClassCard(cls){
     ? `${fmtTime(cls.startTime)} – ${fmtTime(cls.endTime)}`
     : 'TBD';
 
-  const classHrs = cls.hrsPerWeek > 1 ? cls.hrsPerWeek - 1 : cls.hrsPerWeek;
-  const sgHrs = cls.hrsPerWeek > 1 ? 1 : 0;
+  const classHrs = classContactHours(cls);
+  const sgHrs = studyGroupHours(cls);
 
   let html = `<div class="cet-class-card ${dimmed?'cet-dimmed':''} ${highlighted?'cet-highlighted':''} ${!cls.wantsCET?'cet-no-cet':''}"
     data-cet-id="${cls.id}">
@@ -236,7 +250,7 @@ function renderClassCard(cls){
     ${cls.hrsPerWeek > 0 ? `
     <div class="cet-hours-breakdown">
       <span class="cet-hrs-chip cet-hrs-class">${classHrs}h class contact</span>
-      ${sgHrs > 0 ? `<span class="cet-hrs-chip cet-hrs-sg">+1h study group (${cls.studyGroupMode||'TBD'})</span>` : ''}
+      ${sgHrs > 0 ? `<span class="cet-hrs-chip cet-hrs-sg">${studyGroupLabel(cls)}</span>` : `<span class="cet-hrs-chip cet-hrs-no-sg">No study group</span>`}
     </div>` : ''}
 
     <div class="cet-assign-row">`;
@@ -323,7 +337,7 @@ function assignCET(classId){
   const needed = cls.hrsPerWeek || 0;
 
   if(remaining < needed){
-    showToast(`${tutor.name} only has ${remaining}h left — this class needs ${needed}h/wk (including 1h study group).`,'warn');
+    showToast(`${tutor.name} only has ${remaining}h left — this class needs ${needed}h/wk${cls.requiresStudyGroup===false?'':' including study group'}.`,'warn');
     return;
   }
 
@@ -337,7 +351,7 @@ function assignCET(classId){
 
 function doAssignCET(cls, tutorId){
   cls.assignedTutorId = tutorId;
-  showToast(`Assigned! Remember: ${cls.hrsPerWeek}h/wk deducted from their CAS hours (${(cls.hrsPerWeek||0)-1}h class + 1h study group).`,'ok', 5000);
+  showToast(`Assigned! ${cls.hrsPerWeek}h/wk deducted from their CAS hours (${classContactHours(cls)}h class/coursework${cls.requiresStudyGroup===false?'':' + 1h study group'}).`,'ok', 5000);
   renderCET();
 }
 
@@ -433,18 +447,26 @@ function _openClassModal(editId, data){
 
       <div class="form-grid two" style="margin-top:12px">
         <div class="fg">
-          <span class="fl">Total hrs/wk for CET <span style="font-size:10px;font-weight:500">(class hrs + 1 study group)</span></span>
+          <span class="fl">Total hrs/wk for CET</span>
           <input id="cm-hrs" type="number" min="1" max="20" step="0.5"
-            placeholder="e.g. 3 = 2h class + 1h SG"
+            placeholder="e.g. 2 if no SG, 3 if 2h class + 1h SG"
             value="${data.hrsPerWeek||''}">
         </div>
         <div class="fg">
-          <span class="fl">Study group mode</span>
-          <select id="cm-sg-mode">
+          <span class="fl">Study group</span>
+          <label class="cet-study-toggle">
+            <input type="checkbox" id="cm-requires-sg" ${(data.requiresStudyGroup===false)?'':'checked'} onchange="toggleStudyGroupModeVisibility()">
+            <span>This class needs 1-hour study group</span>
+          </label>
+          <select id="cm-sg-mode" style="margin-top:8px">
             <option value="in-person" ${(data.studyGroupMode||'in-person')==='in-person'?'selected':''}>In-person at CAS</option>
             <option value="online" ${(data.studyGroupMode||'')==='online'?'selected':''}>Online</option>
           </select>
         </div>
+      </div>
+
+      <div class="cet-study-note">
+        If study group is checked, the total CET hours should include that extra 1 hour. If it is unchecked, all entered hours are treated as class attendance or course-work hours.
       </div>
 
       <div style="margin-top:12px;background:var(--warn-bg);border:1px solid var(--warn-b);border-radius:11px;padding:12px 14px">
@@ -470,7 +492,16 @@ function _openClassModal(editId, data){
 
   document.body.appendChild(ov);
   ov.addEventListener('click', e => { if(e.target === ov) closeClassModal(); });
+  toggleStudyGroupModeVisibility();
   document.getElementById('cm-title').focus();
+}
+
+function toggleStudyGroupModeVisibility(){
+  const cb = document.getElementById('cm-requires-sg');
+  const sg = document.getElementById('cm-sg-mode');
+  if(!cb || !sg) return;
+  sg.disabled = !cb.checked;
+  sg.style.opacity = cb.checked ? '1' : '.45';
 }
 
 function closeClassModal(){
@@ -487,7 +518,8 @@ function saveClassModal(isEdit, editId){
   const endTime   = document.getElementById('cm-end').value;
   const modality  = document.getElementById('cm-modality').value;
   const hrsPerWeek= parseFloat(document.getElementById('cm-hrs').value)||0;
-  const sgMode    = document.getElementById('cm-sg-mode').value;
+  const requiresSG = document.getElementById('cm-requires-sg')?.checked !== false;
+  const sgMode    = requiresSG ? document.getElementById('cm-sg-mode').value : 'none';
   const wantsCET  = document.querySelector('input[name="cm-wants"]:checked')?.value !== 'no';
 
   if(!title){
@@ -495,7 +527,7 @@ function saveClassModal(isEdit, editId){
     return;
   }
   if(wantsCET && hrsPerWeek <= 0){
-    showToast('Enter the total CET hours per week (class contact + 1h study group).','warn');
+    showToast('Enter the total CET hours per week. Include study group only if this class needs one.','warn');
     return;
   }
 
@@ -503,7 +535,7 @@ function saveClassModal(isEdit, editId){
     id: isEdit ? editId : Date.now(),
     title, professor, semester,
     days, startTime, endTime, modality,
-    hrsPerWeek, studyGroupMode: sgMode,
+    hrsPerWeek, studyGroupMode: sgMode, requiresStudyGroup: requiresSG,
     wantsCET,
     assignedTutorId: isEdit ? (cetClasses.find(c=>c.id===editId)?.assignedTutorId || null) : null
   };
@@ -555,12 +587,12 @@ function openBulkAddModal(){
     <div class="cet-modal-body">
       <p style="font-size:13px;color:var(--muted);margin-bottom:12px;line-height:1.6">
         Paste one class per line. Minimum: <strong>Course Title, Professor</strong>.<br>
-        Full format: <code>Title, Professor, Days (Mon/Tue/...), Start, End, Modality, Hrs/wk, Wants CET (yes/no), Semester</code>
+        Full format: <code>Title, Professor, Days, Start, End, Modality, Hrs/wk, Wants CET, Study Group (yes/no), Semester</code>
       </p>
       <div style="background:var(--cream);border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-family:var(--mono);font-size:11px;margin-bottom:10px;line-height:1.8">
-        ESL 4B, Prof. Martinez, Mon Wed, 9:00, 10:30, in-person, 3, yes, Fall 2026<br>
-        ESL 8, Prof. Lee, Tue Thu, 11:00, 12:30, online-live, 4, yes, Fall 2026<br>
-        ESL 3B, Prof. Kim, Mon Wed Fri, 10:00, 11:00, in-person, 0, no
+        ESL 4B, Prof. Martinez, Mon Wed, 9:00, 10:30, in-person, 3, yes, yes, Fall 2026<br>
+        ESL 8, Prof. Lee, Tue Thu, 11:00, 12:30, online-live, 2, yes, no, Fall 2026<br>
+        ESL 3B, Prof. Kim, Mon Wed Fri, 10:00, 11:00, in-person, 0, no, no
       </div>
       <textarea id="cet-bulk-input" style="min-height:140px" placeholder="Paste your class list here…"></textarea>
       <div id="cet-bulk-preview" style="margin-top:10px;font-size:12px;color:var(--muted)"></div>
@@ -597,14 +629,15 @@ function parseBulkLine(line){
   const modality    = (['in-person','online-live','async'].includes(parts[5])) ? parts[5] : 'in-person';
   const hrsPerWeek  = parseFloat(parts[6]) || 0;
   const wantsCET    = (parts[7] || 'yes').toLowerCase() !== 'no';
-  const semester    = parts[8] || '';
+  const requiresStudyGroup = (parts[8] || 'yes').toLowerCase() !== 'no';
+  const semester    = parts[9] || '';
 
   return {
     id: Date.now() + Math.random(),
     title, professor,
     days: daysRaw,
     startTime, endTime, modality,
-    hrsPerWeek, studyGroupMode: 'in-person',
+    hrsPerWeek, studyGroupMode: requiresStudyGroup ? 'in-person' : 'none', requiresStudyGroup,
     wantsCET, semester,
     assignedTutorId: null
   };

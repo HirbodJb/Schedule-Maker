@@ -207,3 +207,43 @@
   font-size:12px;
   font-weight:700;
 }
+
+
+.cet-hrs-no-sg{
+  background:var(--cream);
+  color:var(--muted);
+  border:1px dashed var(--line-s);
+}
+
+.cet-study-toggle{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  background:var(--cream);
+  border:1px solid var(--line-s);
+  border-radius:10px;
+  padding:8px 10px;
+  font-size:12px;
+  font-weight:800;
+  cursor:pointer;
+  user-select:none;
+}
+
+.cet-study-toggle input{
+  width:16px;
+  height:16px;
+  accent-color:var(--red);
+  flex-shrink:0;
+}
+
+.cet-study-note{
+  margin-top:12px;
+  background:#fff;
+  border:1px solid var(--line);
+  border-radius:11px;
+  padding:10px 12px;
+  font-size:12px;
+  color:var(--muted);
+  line-height:1.55;
+  font-weight:600;
+}
