@@ -122,6 +122,10 @@
 }
 
 /* ── Tutor sidebar ───────────────────────────────────────── */
+/* Align tutor panel with the first CET class card (below the group label). */
+.cet-tutor-col{
+  padding-top:28px;
+}
 .cet-tutor-col .panel{position:sticky;top:16px}
 
 .cet-tutor-row{
