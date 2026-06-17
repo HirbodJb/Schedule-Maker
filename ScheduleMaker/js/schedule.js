@@ -239,7 +239,7 @@ function renderOutput(slots){
         cellClass=(cellClass+' '+(hasFocused?'focus-match-cell':'focus-other')).trim();
       }
 
-      if(!assignedHere.length){html+=`<td class="${cellClass}" onclick="handleScheduleCellClick('${day}','${t}')"></td>`;return;}
+      if(!assignedHere.length){html+=`<td class="${cellClass}" onclick="handleScheduleCellClickGuarded('${day}','${t}')"></td>`;return;}
 
       let pills='';
       assignedHere.forEach(tt=>{
@@ -266,7 +266,7 @@ function renderOutput(slots){
         pills+=`<span class="${pillClass}${editClass}${focusClass}" onmouseenter="showTutorQuickSummary(event,${tt.id},'${day}')" onmousemove="moveTutorQuickSummary(event)" onmouseleave="hideTutorQuickSummary()" onclick="openShiftPopover(event,${tt.id},'${day}','${t}')" style="background:${c.bg};color:${c.text};border:1.5px solid ${c.border}">${tt.name.split(' ')[0]} ${mode}${timeLabel}</span>`;
       });
 
-      html+=`<td class="${cellClass}" onclick="handleScheduleCellClick('${day}','${t}')">${pills}</td>`;
+      html+=`<td class="${cellClass}" onclick="handleScheduleCellClickGuarded('${day}','${t}')">${pills}</td>`;
     });
     html+='</tr>';
   });
@@ -536,3 +536,22 @@ window.addEventListener('error', function(e){
 });
 
 // ── Local smart schedule analysis ─────────────────────────
+
+
+// ── CET conflict guard for manual Add-hours mode ─────────────
+// Prevents a tutor from being manually added to a schedule slot that is already
+// reserved by one of their CET blocks. The auto-generator already checks this;
+// this guard makes manual Add behave the same way.
+function handleScheduleCellClickGuarded(day, time){
+  if(addHoursMode && addHoursMode.tutorId && typeof isTutorBusyWithCET === 'function'){
+    const tutor = getTutorById(addHoursMode.tutorId);
+    if(tutor && isTutorBusyWithCET(tutor, day, time)){
+      showToast(`${escapeHtml(tutor.name)} cannot be assigned at ${day} ${fmtInterval(time)} because they already have a CET during this time.`, 'warn', 4200);
+      return;
+    }
+  }
+
+  if(typeof handleScheduleCellClick === 'function'){
+    handleScheduleCellClick(day, time);
+  }
+}
