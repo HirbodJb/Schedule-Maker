@@ -10,7 +10,7 @@ function generateSchedule(){
     return;
   }
 
-  tutors.forEach(t=>{ t.assignedHrs=0; t.assignments=[]; });
+  tutors.forEach(t=>{ t.assignedHrs=(typeof getCETHoursFor==='function'?getCETHoursFor(t.id):0); t.assignments=[]; });
 
   const allSlots=[];
   ALL_DAYS.forEach(day=>{
@@ -22,6 +22,7 @@ function generateSchedule(){
     const eligible=tutors.filter(t=>{
       const key=slot.day+'-'+slot.time;
       return t.avail[key]===true
+        && !(typeof isTutorBusyWithCET==='function' && isTutorBusyWithCET(t,slot.day,slot.time))
         && t.assignedHrs<t.hrs
         && !wouldExceedConsecutiveLimit(t,slot.day,slot.time,allSlots);
     });
@@ -227,10 +228,11 @@ function renderOutput(slots){
         const available=movingTutor.avail[day+'-'+t]===true;
         const duplicate=assignedHere.some(x=>String(x.id)===String(movingTutor.id));
         const breakOk=!wouldExceedConsecutiveLimit(movingTutor,day,t,currentSlots,{day:moveMode.day,time:moveMode.time});
-        cellClass=(available&&!duplicate&&!sameCell&&breakOk)?'drop-ok':'drop-no';
+        const cetFree=!(typeof isTutorBusyWithCET==='function' && isTutorBusyWithCET(movingTutor,day,t));
+        cellClass=(available&&!duplicate&&!sameCell&&breakOk&&cetFree)?'drop-ok':'drop-no';
       } else if(addHoursMode){
         const addTutor=getTutorById(addHoursMode.tutorId);
-        cellClass=(addTutor && isManualAddSlotValid(addTutor,day,t))?'add-ok':'add-no';
+        cellClass=(addTutor && isManualAddSlotValid(addTutor,day,t) && !(typeof isTutorBusyWithCET==='function' && isTutorBusyWithCET(addTutor,day,t)))?'add-ok':'add-no';
       }
       if(focusedTutorId && !moveMode && !addHoursMode){
         const hasFocused=assignedHere.some(x=>String(x.id)===String(focusedTutorId));

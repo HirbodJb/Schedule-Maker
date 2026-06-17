@@ -251,3 +251,73 @@
   line-height:1.55;
   font-weight:600;
 }
+
+
+/* ── CET v2 multiple assignment UI ───────────────────────── */
+.cet-assignment-list{
+  display:flex;
+  flex-direction:column;
+  gap:7px;
+  flex:1;
+  min-width:260px;
+}
+.cet-assignment-pill{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  border-radius:12px;
+  padding:7px 8px;
+  font-size:12px;
+  font-weight:700;
+}
+.cet-assignment-info{
+  display:flex;
+  flex-direction:column;
+  gap:2px;
+  min-width:0;
+  flex:1;
+}
+.cet-assignment-info span{
+  font-size:10px;
+  font-weight:650;
+  opacity:.78;
+}
+.cet-pill-remove{
+  width:24px;
+  height:24px;
+  border-radius:999px;
+  border:1px solid currentColor;
+  background:#fff8;
+  color:inherit;
+  cursor:pointer;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  flex-shrink:0;
+}
+.cet-pill-remove:hover{background:#fff}
+.cet-assign-modal{max-width:680px}
+.cet-calc-box{
+  min-height:37px;
+  display:flex;
+  align-items:center;
+  background:var(--cream);
+  border:1px solid var(--line-s);
+  border-radius:10px;
+  padding:8px 10px;
+  font-size:13px;
+  font-weight:800;
+  color:var(--ink);
+}
+.cet-assign-warning{
+  margin-top:12px;
+  background:var(--warn-bg);
+  border:1px solid var(--warn-b);
+  border-radius:11px;
+  padding:10px 12px;
+  color:var(--ink);
+  font-size:12px;
+  font-weight:650;
+  line-height:1.45;
+}
+.cet-assign-warning div + div{margin-top:6px}
