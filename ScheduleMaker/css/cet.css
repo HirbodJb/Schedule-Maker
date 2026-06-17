@@ -195,3 +195,15 @@
   padding:14px 22px 18px;border-top:1px solid var(--line);
   position:sticky;bottom:0;background:#fff;border-radius:0 0 20px 20px;
 }
+
+
+.cet-no-compatible{
+  flex:1;
+  background:var(--cream);
+  border:1px dashed var(--line-s);
+  color:var(--muted);
+  border-radius:10px;
+  padding:8px 10px;
+  font-size:12px;
+  font-weight:700;
+}

@@ -35,11 +35,11 @@ function tutorAvailableForClass(tutor, cls){
 
   if(!classSlots.length) return false;
 
-  // Tutor must have at least ONE of the class slots marked available
-  // (we can't always require all slots — async classes especially)
-  if(cls.modality === 'async') return true; // async: no time conflict
+  // For a timed CET class, the tutor must be available for the full class time.
+  // Async classes have no fixed time conflict, so any tutor with enough hours may be shown.
+  if(cls.modality === 'async') return true;
 
-  return classSlots.some(key => tutor.avail && tutor.avail[key] === true);
+  return classSlots.every(key => tutor.avail && tutor.avail[key] === true);
 }
 
 // Net hours a tutor has left after existing CET assignments
@@ -217,7 +217,6 @@ function renderClassCard(cls){
 
     <div class="cet-card-top">
       <div class="cet-card-title">
-        <span class="cet-course-code">${cls.courseCode||''}</span>
         <span class="cet-course-title">${cls.title||'Untitled class'}</span>
       </div>
       <div class="cet-card-actions">
@@ -259,23 +258,35 @@ function renderClassCard(cls){
     const focusedTutor = cetFocusedTutorId ? tutors.find(t=>t.id===cetFocusedTutorId) : null;
     const canAssignFocused = focusedTutor && highlighted;
 
-    html += `<div class="cet-assign-controls">
-      <select class="cet-tutor-select" id="cet-select-${cls.id}" onchange="updateAssignBtn(${cls.id})">
-        <option value="">— Select tutor —</option>`;
-
-    tutors.forEach((t,i) => {
+    const eligibleTutors = tutors.filter(t => {
       const compatible = tutorAvailableForClass(t, cls);
-      const remaining  = tutorCETRemainingHrs(t);
-      const canHandle  = remaining >= (cls.hrsPerWeek||0);
-      const label = `${t.name}${compatible?' ✓':''}${!canHandle?' (low hrs)':''}`;
-      html += `<option value="${t.id}" ${canAssignFocused&&t.id===focusedTutor.id?'selected':''} ${!canHandle?'style="color:var(--muted)"':''}>${label}</option>`;
+      const remaining = tutorCETRemainingHrs(t);
+      const canHandle = remaining >= (cls.hrsPerWeek || 0);
+      return compatible && canHandle;
     });
 
-    html += `</select>
-      <button class="btn btn-red btn-sm" onclick="assignCET(${cls.id})" id="cet-assign-btn-${cls.id}">
-        <i class="ti ti-check"></i> Assign
-      </button>
-    </div>`;
+    html += `<div class="cet-assign-controls">`;
+
+    if(!eligibleTutors.length){
+      html += `<div class="cet-no-compatible">
+        No tutor is available for this class time with enough remaining hours.
+      </div>`;
+    } else {
+      html += `<select class="cet-tutor-select" id="cet-select-${cls.id}" onchange="updateAssignBtn(${cls.id})">
+        <option value="">— Select tutor available for this course —</option>`;
+
+      eligibleTutors.forEach((t) => {
+        const remaining = tutorCETRemainingHrs(t);
+        html += `<option value="${t.id}" ${canAssignFocused&&t.id===focusedTutor.id?'selected':''}>${t.name} · ${remaining}h left</option>`;
+      });
+
+      html += `</select>
+        <button class="btn btn-red btn-sm" onclick="assignCET(${cls.id})" id="cet-assign-btn-${cls.id}">
+          <i class="ti ti-check"></i> Assign
+        </button>`;
+    }
+
+    html += `</div>`;
   }
 
   html += `</div></div>`; // assign-row + card
@@ -316,14 +327,8 @@ function assignCET(classId){
     return;
   }
 
-  // Warn if times don't align (but allow override — Jamie knows best)
   if(!tutorAvailableForClass(tutor, cls) && cls.modality !== 'async'){
-    showConfirm(
-      'Schedule conflict',
-      `${tutor.name}'s marked availability doesn't fully overlap with this class's time. Do you want to assign them anyway?`,
-      () => { doAssignCET(cls, tutorId); },
-      'Assign anyway'
-    );
+    showToast(`${tutor.name} is not available for this class time.`, 'warn');
     return;
   }
 
@@ -381,12 +386,8 @@ function _openClassModal(editId, data){
 
       <div class="form-grid two">
         <div class="fg">
-          <span class="fl">Course code</span>
-          <input id="cm-code" placeholder="e.g. ESL 1" value="${data.courseCode||''}">
-        </div>
-        <div class="fg">
-          <span class="fl">Class title</span>
-          <input id="cm-title" placeholder="e.g. English Fundamentals" value="${data.title||''}">
+          <span class="fl">Course title</span>
+          <input id="cm-title" placeholder="e.g. ESL 4B" value="${data.title||data.courseCode||''}">
         </div>
       </div>
 
@@ -469,7 +470,7 @@ function _openClassModal(editId, data){
 
   document.body.appendChild(ov);
   ov.addEventListener('click', e => { if(e.target === ov) closeClassModal(); });
-  document.getElementById('cm-code').focus();
+  document.getElementById('cm-title').focus();
 }
 
 function closeClassModal(){
@@ -479,7 +480,6 @@ function closeClassModal(){
 
 function saveClassModal(isEdit, editId){
   const title     = document.getElementById('cm-title').value.trim();
-  const courseCode= document.getElementById('cm-code').value.trim();
   const professor = document.getElementById('cm-prof').value.trim();
   const semester  = document.getElementById('cm-semester').value.trim();
   const days      = [...document.querySelectorAll('input[name="cm-days"]:checked')].map(el=>el.value);
@@ -490,8 +490,8 @@ function saveClassModal(isEdit, editId){
   const sgMode    = document.getElementById('cm-sg-mode').value;
   const wantsCET  = document.querySelector('input[name="cm-wants"]:checked')?.value !== 'no';
 
-  if(!title && !courseCode){
-    showToast('Please enter at least a course code or title.','warn');
+  if(!title){
+    showToast('Please enter the course title.','warn');
     return;
   }
   if(wantsCET && hrsPerWeek <= 0){
@@ -501,7 +501,7 @@ function saveClassModal(isEdit, editId){
 
   const obj = {
     id: isEdit ? editId : Date.now(),
-    title, courseCode, professor, semester,
+    title, professor, semester,
     days, startTime, endTime, modality,
     hrsPerWeek, studyGroupMode: sgMode,
     wantsCET,
@@ -517,7 +517,7 @@ function saveClassModal(isEdit, editId){
 
   closeClassModal();
   renderCET();
-  showToast(isEdit ? 'Class updated.' : `"${courseCode||title}" added.`, 'ok', 2500);
+  showToast(isEdit ? 'Class updated.' : `"${title}" added.`, 'ok', 2500);
 }
 
 // ── Delete class ──────────────────────────────────────────────
@@ -527,7 +527,7 @@ function deleteCETClass(classId){
   if(!cls) return;
   showConfirm(
     'Remove class?',
-    `Remove ${cls.courseCode||cls.title||'this class'} and its CET assignment?`,
+    `Remove ${cls.title||'this class'} and its CET assignment?`,
     () => {
       cetClasses = cetClasses.filter(c => c.id !== classId);
       renderCET();
@@ -554,13 +554,13 @@ function openBulkAddModal(){
     </div>
     <div class="cet-modal-body">
       <p style="font-size:13px;color:var(--muted);margin-bottom:12px;line-height:1.6">
-        Paste one class per line. Minimum: <strong>Course Code, Title, Professor</strong>.<br>
-        Full format: <code>Code, Title, Professor, Days (Mon/Tue/...), Start, End, Modality, Hrs/wk, Wants CET (yes/no), Semester</code>
+        Paste one class per line. Minimum: <strong>Course Title, Professor</strong>.<br>
+        Full format: <code>Title, Professor, Days (Mon/Tue/...), Start, End, Modality, Hrs/wk, Wants CET (yes/no), Semester</code>
       </p>
       <div style="background:var(--cream);border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-family:var(--mono);font-size:11px;margin-bottom:10px;line-height:1.8">
-        ESL 1, English Fundamentals, Prof. Martinez, Mon Wed, 9:00, 10:30, in-person, 3, yes, Fall 2026<br>
-        ESL 2, Reading Skills, Prof. Lee, Tue Thu, 11:00, 12:30, online-live, 4, yes, Fall 2026<br>
-        ESL 5, Academic Writing, Prof. Kim, Mon Wed Fri, 10:00, 11:00, in-person, 0, no
+        ESL 4B, Prof. Martinez, Mon Wed, 9:00, 10:30, in-person, 3, yes, Fall 2026<br>
+        ESL 8, Prof. Lee, Tue Thu, 11:00, 12:30, online-live, 4, yes, Fall 2026<br>
+        ESL 3B, Prof. Kim, Mon Wed Fri, 10:00, 11:00, in-person, 0, no
       </div>
       <textarea id="cet-bulk-input" style="min-height:140px" placeholder="Paste your class list here…"></textarea>
       <div id="cet-bulk-preview" style="margin-top:10px;font-size:12px;color:var(--muted)"></div>
@@ -584,25 +584,24 @@ function closeBulkModal(){
 
 function parseBulkLine(line){
   const parts = line.split(',').map(s=>s.trim());
-  if(parts.length < 2) return null;
+  if(parts.length < 1 || !parts[0]) return null;
 
-  const courseCode  = parts[0] || '';
-  const title       = parts[1] || '';
-  const professor   = parts[2] || '';
-  const daysRaw     = (parts[3] || '').split(/[\s\/]+/).map(d=>{
+  const title       = parts[0] || '';
+  const professor   = parts[1] || '';
+  const daysRaw     = (parts[2] || '').split(/[\s\/]+/).map(d=>{
     const map = {mon:'Monday',tue:'Tuesday',wed:'Wednesday',thu:'Thursday',fri:'Friday',sat:'Saturday'};
     return map[d.toLowerCase().slice(0,3)] || '';
   }).filter(Boolean);
-  const startTime   = parts[4] || '';
-  const endTime     = parts[5] || '';
-  const modality    = (['in-person','online-live','async'].includes(parts[6])) ? parts[6] : 'in-person';
-  const hrsPerWeek  = parseFloat(parts[7]) || 0;
-  const wantsCET    = (parts[8] || 'yes').toLowerCase() !== 'no';
-  const semester    = parts[9] || '';
+  const startTime   = parts[3] || '';
+  const endTime     = parts[4] || '';
+  const modality    = (['in-person','online-live','async'].includes(parts[5])) ? parts[5] : 'in-person';
+  const hrsPerWeek  = parseFloat(parts[6]) || 0;
+  const wantsCET    = (parts[7] || 'yes').toLowerCase() !== 'no';
+  const semester    = parts[8] || '';
 
   return {
     id: Date.now() + Math.random(),
-    courseCode, title, professor,
+    title, professor,
     days: daysRaw,
     startTime, endTime, modality,
     hrsPerWeek, studyGroupMode: 'in-person',
@@ -633,7 +632,7 @@ function importBulk(){
     const obj = parseBulkLine(l);
     if(!obj) return;
     // Avoid exact duplicate course code + professor
-    if(cetClasses.find(c => c.courseCode===obj.courseCode && c.professor===obj.professor)) return;
+    if(cetClasses.find(c => c.title===obj.title && c.professor===obj.professor)) return;
     cetClasses.push(obj);
     added++;
   });

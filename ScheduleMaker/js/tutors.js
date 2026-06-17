@@ -64,6 +64,46 @@ function addTutor(){
   showStatus('import-status','',null);
 }
 
+
+function cancelAddTutor(){
+  // Clear text fields
+  const nameEl = document.getElementById('t-name');
+  const emailEl = document.getElementById('t-email');
+  const phoneEl = document.getElementById('t-phone');
+  if(nameEl) nameEl.value = '';
+  if(emailEl) emailEl.value = '';
+  if(phoneEl) phoneEl.value = '';
+
+  // Reset dropdowns
+  const eng101El = document.getElementById('t-eng101');
+  const hrsEl = document.getElementById('t-hrs');
+  const otherEl = document.getElementById('t-other');
+  const modeEl = document.getElementById('t-mode');
+  const satEl = document.getElementById('t-sat');
+  const stableEl = document.getElementById('t-stable');
+
+  if(eng101El) eng101El.value = 'yes';
+  if(hrsEl) hrsEl.value = '8';
+  if(otherEl) otherEl.value = '0';
+  if(modeEl) modeEl.value = 'both';
+  if(satEl) satEl.value = 'no';
+  if(stableEl) stableEl.value = 'stable';
+
+  // Clear priority radio buttons
+  document.querySelectorAll('input[name="t-priority"]').forEach(r=>r.checked=false);
+
+  // Clear availability grid
+  if(typeof clearAvail === 'function') clearAvail();
+
+  // Close the add tutor accordion
+  const addDetails = document.getElementById('add-details');
+  if(addDetails) addDetails.removeAttribute('open');
+
+  // Clear any status message
+  if(typeof showStatus === 'function') showStatus('import-status','',null);
+}
+
+
 // ── Clear everything & start over ───────────────────────
 function clearAll(){
   showConfirm(
