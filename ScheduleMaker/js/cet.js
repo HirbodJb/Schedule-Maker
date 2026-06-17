@@ -549,11 +549,11 @@ function _openClassModal(editId, data){
       <div class="form-grid" style="margin-top:12px;grid-template-columns:1fr 1fr 1fr">
         <div class="fg">
           <span class="fl">Start time</span>
-          <input id="cm-start" type="time" value="${data.startTime||''}">
+          ${cetTimePickerHTML('cm-start', data.startTime||'')}
         </div>
         <div class="fg">
           <span class="fl">End time</span>
-          <input id="cm-end" type="time" value="${data.endTime||''}">
+          ${cetTimePickerHTML('cm-end', data.endTime||'')}
         </div>
         <div class="fg">
           <span class="fl">Modality</span>
@@ -630,6 +630,7 @@ function closeClassModal(){
 }
 
 function saveClassModal(isEdit, editId){
+  cetSyncAllTimePickers();
   const title     = document.getElementById('cm-title').value.trim();
   const professor = document.getElementById('cm-prof').value.trim();
   const semester  = document.getElementById('cm-semester').value.trim();
@@ -872,6 +873,60 @@ function formatCETHours(h){
   return `${n.toFixed(n % 1 ? 1 : 0)}h`;
 }
 
+
+// ── Custom 12-hour time picker (5-minute intervals) ─────────
+function cetTimePartsFrom24(value){
+  if(!value) return {hour:'', minute:'', ampm:'AM'};
+  const [hhRaw, mmRaw] = String(value).split(':');
+  const h24 = parseInt(hhRaw, 10);
+  const minuteNum = parseInt(mmRaw || '0', 10);
+  if(Number.isNaN(h24)) return {hour:'', minute:'', ampm:'AM'};
+  const ampm = h24 >= 12 ? 'PM' : 'AM';
+  const hour12 = h24 % 12 || 12;
+  // Round display minute down to nearest 5 if older data has another value.
+  const minute = String(Math.round(minuteNum / 5) * 5).padStart(2, '0');
+  return {hour:String(hour12), minute:minute === '60' ? '55' : minute, ampm};
+}
+
+function cetTime24FromParts(hour, minute, ampm){
+  const h = parseInt(hour, 10);
+  const m = parseInt(minute, 10);
+  if(Number.isNaN(h) || Number.isNaN(m)) return '';
+  let h24 = h % 12;
+  if(ampm === 'PM') h24 += 12;
+  return `${String(h24).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
+}
+
+function cetTimePickerHTML(id, value, onchangeExtra=''){
+  const parts = cetTimePartsFrom24(value || '');
+  const hourOptions = ['','1','2','3','4','5','6','7','8','9','10','11','12']
+    .map(h => `<option value="${h}" ${parts.hour===h?'selected':''}>${h || 'Hour'}</option>`).join('');
+  const minuteOptions = [''].concat(Array.from({length:12}, (_,i)=>String(i*5).padStart(2,'0')))
+    .map(m => `<option value="${m}" ${parts.minute===m?'selected':''}>${m || 'Min'}</option>`).join('');
+  const ampmOptions = ['AM','PM']
+    .map(ap => `<option value="${ap}" ${parts.ampm===ap?'selected':''}>${ap}</option>`).join('');
+  const change = `cetSyncTimePicker('${id}');${onchangeExtra || ''}`;
+  return `<input type="hidden" id="${id}" value="${value || ''}">
+    <div class="cet-time-picker" data-time-picker="${id}">
+      <select id="${id}-hour" onchange="${change}" aria-label="Hour">${hourOptions}</select>
+      <span class="cet-time-sep">:</span>
+      <select id="${id}-minute" onchange="${change}" aria-label="Minute">${minuteOptions}</select>
+      <select id="${id}-ampm" onchange="${change}" aria-label="AM or PM">${ampmOptions}</select>
+    </div>`;
+}
+
+function cetSyncTimePicker(id){
+  const hidden = document.getElementById(id);
+  const hour = document.getElementById(`${id}-hour`)?.value || '';
+  const minute = document.getElementById(`${id}-minute`)?.value || '';
+  const ampm = document.getElementById(`${id}-ampm`)?.value || 'AM';
+  if(hidden) hidden.value = cetTime24FromParts(hour, minute, ampm);
+}
+
+function cetSyncAllTimePickers(){
+  document.querySelectorAll('[data-time-picker]').forEach(el => cetSyncTimePicker(el.dataset.timePicker));
+}
+
 function tutorHasAnyAvailabilityDuringClass(tutor, cls){
   normalizeCETClass(cls);
   if(!tutor || !cls || !cls.wantsCET) return false;
@@ -1110,8 +1165,8 @@ function openCETAssignModal(classId){
         ${classDays.map(d => `<label class="cet-day-label"><input type="checkbox" name="ca-days" value="${d}" checked onchange="updateCETAssignPreview(${cls.id})"> ${d.slice(0,3)}</label>`).join('')}
       </div></div>
       <div class="form-grid two" style="margin-top:12px">
-        <div class="fg"><span class="fl">CET start time</span><input id="ca-start" type="time" value="${cls.startTime || ''}" onchange="updateCETAssignPreview(${cls.id})"></div>
-        <div class="fg"><span class="fl">CET end time</span><input id="ca-end" type="time" value="${cls.endTime || ''}" onchange="updateCETAssignPreview(${cls.id})"></div>
+        <div class="fg"><span class="fl">CET start time</span>${cetTimePickerHTML('ca-start', cls.startTime || '', `updateCETAssignPreview(${cls.id})`)}</div>
+        <div class="fg"><span class="fl">CET end time</span>${cetTimePickerHTML('ca-end', cls.endTime || '', `updateCETAssignPreview(${cls.id})`)}</div>
       </div>
       <div id="ca-warning" class="cet-assign-warning" style="display:none"></div>
     </div>
@@ -1129,6 +1184,7 @@ function closeCETAssignModal(){
 }
 
 function getCETAssignDraft(){
+  cetSyncAllTimePickers();
   const tutorId = parseInt(document.getElementById('ca-tutor')?.value || '', 10);
   const days = [...document.querySelectorAll('input[name="ca-days"]:checked')].map(el=>el.value);
   const startTime = document.getElementById('ca-start')?.value || '';
@@ -1272,6 +1328,7 @@ function unassignCET(classId){
 }
 
 function saveClassModal(isEdit, editId){
+  cetSyncAllTimePickers();
   const title     = document.getElementById('cm-title').value.trim();
   const professor = document.getElementById('cm-prof').value.trim();
   const semester  = document.getElementById('cm-semester').value.trim();
