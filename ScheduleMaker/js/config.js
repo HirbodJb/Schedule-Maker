@@ -2,7 +2,7 @@
 const APP_METADATA = Object.freeze({
   createdBy: 'Hirbod Jabbarnezhad',
   software: 'CAS ESL Schedule Builder',
-  version: '1.0',
+  version: '2.0',
   year: '2026',
   copyright: 'Copyright (c) 2026 Hirbod Jabbarnezhad',
   attribution: 'Originally designed and developed by Hirbod Jabbarnezhad. Attribution should remain included in shared or modified copies.'

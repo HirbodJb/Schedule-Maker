@@ -15,6 +15,23 @@ function dismissToast(el){
   el.classList.add('hiding');
   el.addEventListener('animationend',()=>el.remove(),{once:true});
 }
+
+
+// ── Schedule stale-change warning ─────────────────────────
+let scheduleNeedsRegeneration = false;
+
+function markScheduleNeedsRegeneration(changeLabel='changes'){
+  scheduleNeedsRegeneration = true;
+  const label = String(changeLabel || 'changes');
+  if(typeof showToast === 'function'){
+    showToast(`Schedule may be outdated — regenerate the schedule after ${label}.`, 'warn', 6500);
+  }
+}
+
+function clearScheduleRegenerationWarning(){
+  scheduleNeedsRegeneration = false;
+}
+
 function showConfirm(title, msg, onConfirm, confirmLabel='Delete', confirmClass='btn-danger'){
   const old=document.getElementById('confirm-overlay');
   if(old) old.remove();
@@ -61,7 +78,7 @@ function openAboutModal(){
           <div class="credit-grid">
             <div class="credit-mini">
               <strong>Version</strong>
-              <span>1.0 · 2026</span>
+              <span>2.0 · 2026</span>
             </div>
             <div class="credit-mini">
               <strong>Authorship</strong>
