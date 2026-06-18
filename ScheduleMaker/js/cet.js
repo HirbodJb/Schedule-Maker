@@ -1818,6 +1818,93 @@ function resetCETStudyGroupStatus(){
   });
 }
 
+
+// ── CET tutor eligibility filters ────────────────────────────
+// For the CET assignment dropdown, only show tutors who are realistic
+// candidates for the class:
+//   • Regular meeting-time classes: at least 1 continuous hour of overlap
+//     with the class time on at least one selected meeting day.
+//   • Saturday-only classes: tutor must have Saturday marked available
+//     in the roster.
+//   • Async classes: no meeting-time filter; SG availability is checked
+//     after a tutor is selected.
+function tutorHasSaturdayRosterAvailability(tutor){
+  return !!(tutor && (tutor.sat === true || tutor.sat === 'yes' || tutor.saturday === true || tutor.saturday === 'yes'));
+}
+
+function classIsSaturdayOnly(cls){
+  const days = Array.isArray(cls && cls.days) ? cls.days : [];
+  return days.length > 0 && days.every(d => d === 'Saturday');
+}
+
+function classHasSaturday(cls){
+  const days = Array.isArray(cls && cls.days) ? cls.days : [];
+  return days.includes('Saturday');
+}
+
+function tutorHasOneHourClassOverlap(tutor, cls){
+  if(!tutor || !cls) return false;
+
+  // Async classes have no fixed class meeting time.
+  if(cls.modality === 'async') return true;
+
+  const days = Array.isArray(cls.days) ? cls.days : [];
+  if(!days.length || !cls.startTime || !cls.endTime) return true;
+
+  const start = timeToMins(cls.startTime);
+  const end = timeToMins(cls.endTime);
+  if(end <= start) return true;
+
+  // Saturday-only classes use the roster Saturday flag because the weekly
+  // availability grid does not store Saturday time slots.
+  if(classIsSaturdayOnly(cls)) return tutorHasSaturdayRosterAvailability(tutor);
+
+  // If Saturday is one of several class days, require the Saturday flag for
+  // Saturday coverage, but still allow weekday overlap to decide if they can
+  // take the weekday portion.
+  if(classHasSaturday(cls) && !tutorHasSaturdayRosterAvailability(tutor)) return false;
+
+  const weekdayDays = days.filter(d => d !== 'Saturday');
+  if(!weekdayDays.length) return tutorHasSaturdayRosterAvailability(tutor);
+
+  // Need at least 2 consecutive available 30-minute slots within the class.
+  for(const day of weekdayDays){
+    let consecutive = 0;
+    for(let m = start; m < end; m += 30){
+      const key = slotKeyFor(day, m);
+      if(tutor.avail && tutor.avail[key] === true){
+        consecutive += 30;
+        if(consecutive >= 60) return true;
+      } else {
+        consecutive = 0;
+      }
+    }
+  }
+  return false;
+}
+
+function tutorEligibleForCETClassDropdown(tutor, cls){
+  if(!tutor || !cls) return false;
+  if(tutorCETRemainingHrs(tutor) <= 0) return false;
+  return tutorHasOneHourClassOverlap(tutor, cls);
+}
+
+// Keep focus mode consistent with the dropdown eligibility rule.
+function tutorAvailableForClass(tutor, cls){
+  return tutorEligibleForCETClassDropdown(tutor, cls);
+}
+
+function tutorHasAnyAvailabilityDuringClass(tutor, cls){
+  return tutorEligibleForCETClassDropdown(tutor, cls);
+}
+
+function cetNoEligibleTutorMessage(cls){
+  if(cls && cls.modality === 'async') return 'No tutor has remaining CET hours for this async class.';
+  if(classIsSaturdayOnly(cls)) return 'No tutor with Saturday availability has remaining CET hours for this class.';
+  return 'No tutor has at least 1 hour of availability during this class time.';
+}
+
+
 function openCETAssignModal(classId){
   normalizeAllCETClasses();
   const cls = cetClasses.find(c => String(c.id) === String(classId));
@@ -1831,10 +1918,12 @@ function openCETAssignModal(classId){
   ov.id = 'cet-assign-overlay';
   ov.className = 'cet-modal-overlay';
   const allowedDays = (typeof activeScheduleDays === 'function') ? activeScheduleDays() : ALL_DAYS;
-  const classDaysRaw = Array.isArray(cls.days) && cls.days.length ? cls.days : allowedDays;
-  const classDays = classDaysRaw.filter(d => allowedDays.includes(d));
+  const cetClassDays = [...allowedDays, 'Saturday'].filter((d, i, arr) => arr.indexOf(d) === i);
+  const classDaysRaw = Array.isArray(cls.days) && cls.days.length ? cls.days : cetClassDays;
+  const classDays = classDaysRaw.filter(d => cetClassDays.includes(d));
   const focused = cetFocusedTutorId || '';
   const courseworkHours = Math.max(0, Number(cls.hrsPerWeek || 0) - (needsSG ? 1 : 0));
+  const eligibleTutors = tutors.filter(t => tutorEligibleForCETClassDropdown(t, cls));
 
   ov.innerHTML = `<div class="cet-modal cet-assign-modal" role="dialog" aria-modal="true">
     <div class="cet-modal-header"><h3>Add CET tutor block</h3><button class="cet-modal-close" onclick="closeCETAssignModal()">&times;</button></div>
@@ -1843,7 +1932,9 @@ function openCETAssignModal(classId){
       <div class="form-grid two" style="margin-top:12px">
         <div class="fg"><span class="fl">Tutor</span><select id="ca-tutor" onchange="updateCETAssignPreview(${cls.id})">
           <option value="">— Select tutor —</option>
-          ${tutors.map(t => `<option value="${t.id}" ${String(focused)===String(t.id)?'selected':''}>${cetEsc(t.name)} · ${formatCETHours(tutorCETRemainingHrs(t))} left</option>`).join('')}
+          ${eligibleTutors.length
+            ? eligibleTutors.map(t => `<option value="${t.id}" ${String(focused)===String(t.id)?'selected':''}>${cetEsc(t.name)} · ${formatCETHours(tutorCETRemainingHrs(t))} left</option>`).join('')
+            : `<option value="" disabled>${cetNoEligibleTutorMessage(cls)}</option>`}
         </select></div>
         <div class="fg"><span class="fl">Calculated hours</span><div class="cet-calc-box" id="ca-hours-preview">Select tutor${isAsync && needsSG ? ' and SG time' : ' and times'}</div></div>
       </div>
@@ -1977,6 +2068,7 @@ function saveCETAssignment(classId){
   const needsSG = assignmentNeedsStudyGroup(cls, {tutorId:draft.tutorId});
 
   if(!tutor){ showToast('Select a tutor first.', 'warn'); return; }
+  if(!tutorEligibleForCETClassDropdown(tutor, cls)){ showToast('This tutor does not meet the CET availability requirement for this class.', 'warn'); return; }
 
   if(isAsync){
     if(needsSG){
