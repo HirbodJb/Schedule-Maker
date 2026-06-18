@@ -1025,12 +1025,81 @@ function resetCETStudyGroupStatus(){
   });
 }
 
+
+function findScheduledSGPlacementForAssignment(cls, assignment){
+  if(!assignment || !Array.isArray(currentSlots) || !currentSlots.length) return null;
+
+  const matches = [];
+  currentSlots.forEach(slot => {
+    (slot.assigned || []).forEach(tt => {
+      if(tt && tt._type === 'sg'
+        && String(tt.id) === String(assignment.tutorId)
+        && (String(tt._sgAssignmentId) === String(assignment.id)
+          || (String(tt._sgClassId) === String(cls.id)))){
+        matches.push({day:slot.day, time:slot.time});
+      }
+    });
+  });
+
+  if(!matches.length) return null;
+
+  matches.sort((a,b) => {
+    const dayDiff = ALL_DAYS.indexOf(a.day) - ALL_DAYS.indexOf(b.day);
+    return dayDiff || (timeToMins(a.time) - timeToMins(b.time));
+  });
+
+  const first = matches[0];
+  const sameDay = matches.filter(x => x.day === first.day).sort((a,b)=>timeToMins(a.time)-timeToMins(b.time));
+  const startMins = timeToMins(sameDay[0].time);
+  const endMins = startMins + Math.max(60, sameDay.length * 30);
+
+  return {
+    day: first.day,
+    startTime: sameDay[0].time,
+    endTime: minsToScheduleTime(endMins),
+    weeklyHours: 1
+  };
+}
+
+function syncCETStudyGroupStatusFromSchedule(){
+  if(!Array.isArray(cetClasses)) return;
+  cetClasses.forEach(cls => {
+    (cls.assignments || []).forEach(a => {
+      if(!assignmentNeedsStudyGroup(cls, a)) return;
+
+      const found = findScheduledSGPlacementForAssignment(cls, a);
+      if(found){
+        a.sgStatus = 'scheduled';
+        a.sgPlacement = found;
+        a.sgNote = 'Study group is placed in the schedule. Manually change if needed.';
+      }
+    });
+  });
+}
+
+function isCETStudyGroupResolved(cls, assignment){
+  if(!assignmentNeedsStudyGroup(cls, assignment)) return true;
+  if(assignment.sgStatus === 'scheduled' && assignment.sgPlacement) return true;
+  if(assignment.sgPlacement && assignment.sgPlacement.day && assignment.sgPlacement.startTime && assignment.sgPlacement.endTime) return true;
+
+  const found = findScheduledSGPlacementForAssignment(cls, assignment);
+  if(found){
+    assignment.sgStatus = 'scheduled';
+    assignment.sgPlacement = found;
+    assignment.sgNote = 'Study group is placed in the schedule. Manually change if needed.';
+    return true;
+  }
+
+  return false;
+}
+
 function getUnresolvedCETStudyGroups(){
   normalizeAllCETClasses();
+  syncCETStudyGroupStatusFromSchedule();
   const out = [];
   cetClasses.forEach(cls => {
     (cls.assignments || []).forEach(a => {
-      if(assignmentNeedsStudyGroup(cls, a) && a.sgStatus !== 'scheduled'){
+      if(assignmentNeedsStudyGroup(cls, a) && !isCETStudyGroupResolved(cls, a)){
         out.push({cls, assignment:a});
       }
     });
@@ -1058,6 +1127,7 @@ function renderCET(){
   const pane = document.getElementById('pane-cet');
   if(!pane) return;
   normalizeAllCETClasses();
+  syncCETStudyGroupStatusFromSchedule();
 
   const hasClasses = cetClasses.length > 0;
   const hasTutors  = tutors.length > 0;
@@ -1072,6 +1142,7 @@ function renderCET(){
       </span>
     </div>
     <div class="cet-toolbar-right">
+      <button class="btn" onclick="switchPane('generate')"><i class="ti ti-calendar-event"></i> Generate schedule →</button>
       <button class="btn btn-red" onclick="openAddClassModal()"><i class="ti ti-plus"></i> Add class</button>
       <button class="btn btn-sm" onclick="openBulkAddModal()"><i class="ti ti-list-check"></i> Bulk add</button>
       <button class="btn btn-sm btn-danger" ${!hasClasses?'style="display:none"':''} onclick="clearAllCETClasses()"><i class="ti ti-trash"></i> Clear classes</button>
@@ -1182,7 +1253,7 @@ function renderClassCard(cls){
         const c = cetColorFor(tutor.id);
         html += `<div class="cet-assignment-pill" style="background:${c.bg};color:${c.text};border:1.5px solid ${c.border}">
           <div class="avatar" style="background:${c.bg};color:${c.text};width:22px;height:22px;font-size:9px;flex-shrink:0">${initials(tutor.name)}</div>
-          <div class="cet-assignment-info"><strong>${cetEsc(tutor.name)}</strong><span>${cetAssignmentTimeLabel(a)} · ${formatCETHours(a.weeklyHours)}/wk</span>${assignmentNeedsStudyGroup(cls,a) ? (a.sgStatus === 'scheduled' && a.sgPlacement ? `<span class="cet-sg-ok">SG ${a.sgPlacement.day.slice(0,3)} · ${fmtTime(a.sgPlacement.startTime)}–${fmtTime(a.sgPlacement.endTime)}</span>` : `<span class="cet-sg-warning">⚠ SG needs manual time</span>`) : ''}</div>
+          <div class="cet-assignment-info"><strong>${cetEsc(tutor.name)}</strong><span>${cetAssignmentTimeLabel(a)} · ${formatCETHours(a.weeklyHours)}/wk</span>${assignmentNeedsStudyGroup(cls,a) ? (isCETStudyGroupResolved(cls,a) && a.sgPlacement ? `<span class="cet-sg-ok">✓ SG placed ${a.sgPlacement.day.slice(0,3)} · ${fmtTime(a.sgPlacement.startTime)}–${fmtTime(a.sgPlacement.endTime)} · change manually if needed</span>` : `<span class="cet-sg-warning">⚠ SG needs manual time</span>`) : ''}</div>
           <button class="cet-pill-remove" onclick="removeCETAssignment(${cls.id}, ${a.id})" title="Remove this tutor"><i class="ti ti-x"></i></button>
         </div>`;
       });
