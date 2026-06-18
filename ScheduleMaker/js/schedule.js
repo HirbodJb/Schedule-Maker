@@ -1,3 +1,95 @@
+// ── CET Study Group auto-placement helpers ─────────────────
+function scheduleSlotKey(day, time){ return day + '-' + time; }
+function minsToScheduleTime(mins){ return `${Math.floor(mins/60)}:${mins%60===0?'00':String(mins%60).padStart(2,'0')}`; }
+function scheduleFindSlot(slots, day, time){ return slots.find(s => s.day === day && s.time === time); }
+function scheduleSlotHasTutor(slot, tutorId){ return !!(slot && slot.assigned && slot.assigned.some(x => String(x.id) === String(tutorId))); }
+function isStudyGroupBlockValid(tutor, day, startTime, slots){
+  const times = timesForDay(day);
+  const startMins = timeToMins(startTime);
+  const blockTimes = [startTime, minsToScheduleTime(startMins + 30)];
+  if(!blockTimes.every(t => times.includes(t))) return false;
+  return blockTimes.every(t => {
+    const key = scheduleSlotKey(day, t);
+    const slot = scheduleFindSlot(slots, day, t);
+    return tutor.avail && tutor.avail[key] === true
+      && !(typeof isTutorBusyWithCET === 'function' && isTutorBusyWithCET(tutor, day, t))
+      && !scheduleSlotHasTutor(slot, tutor.id);
+  });
+}
+function placeStudyGroupBlock(tutor, cls, assignment, day, startTime, slots){
+  const startMins = timeToMins(startTime);
+  const blockTimes = [startTime, minsToScheduleTime(startMins + 30)];
+  const sgTutor = Object.assign({}, tutor, {
+    _type:'sg',
+    _sgClassId: cls.id,
+    _sgAssignmentId: assignment.id,
+    _sgTitle: cls.title || 'Study group'
+  });
+  blockTimes.forEach(t => {
+    const slot = scheduleFindSlot(slots, day, t);
+    if(slot && !scheduleSlotHasTutor(slot, tutor.id)) slot.assigned.push(sgTutor);
+  });
+  assignment.sgStatus = 'scheduled';
+  assignment.sgPlacement = {
+    day,
+    startTime,
+    endTime: minsToScheduleTime(startMins + 60),
+    weeklyHours: 1
+  };
+  assignment.sgNote = 'Study group auto-placed next to class time.';
+  tutor.assignedHrs = Number(tutor.assignedHrs || 0) + 1;
+}
+function autoPlaceCETStudyGroups(slots){
+  if(typeof normalizeAllCETClasses !== 'function') return [];
+  normalizeAllCETClasses();
+  const unresolved = [];
+  cetClasses.forEach(cls => {
+    (cls.assignments || []).forEach(a => {
+      if(!(typeof assignmentNeedsStudyGroup === 'function' && assignmentNeedsStudyGroup(cls, a))) return;
+      const tutor = getTutorById(a.tutorId);
+      if(!tutor){
+        a.sgStatus = 'manual-needed';
+        a.sgPlacement = null;
+        a.sgNote = 'Tutor was not found in the roster.';
+        unresolved.push({cls, assignment:a});
+        return;
+      }
+      a.sgStatus = 'pending';
+      a.sgPlacement = null;
+      a.sgNote = '';
+
+      const candidates = [];
+      (a.days || []).forEach(day => {
+        const after = a.endTime;
+        const before = minsToScheduleTime(timeToMins(a.startTime) - 60);
+        candidates.push({day, startTime: after, priority: 'after'});
+        candidates.push({day, startTime: before, priority: 'before'});
+      });
+
+      const chosen = candidates.find(c => isStudyGroupBlockValid(tutor, c.day, c.startTime, slots));
+      if(chosen){
+        placeStudyGroupBlock(tutor, cls, a, chosen.day, chosen.startTime, slots);
+      } else {
+        a.sgStatus = 'manual-needed';
+        a.sgPlacement = null;
+        a.sgNote = 'No available 1-hour SG block immediately before or after the CET class time. Please assign SG manually.';
+        unresolved.push({cls, assignment:a});
+      }
+    });
+  });
+  return unresolved;
+}
+function cetStudyGroupWarningBanner(){
+  if(typeof getUnresolvedCETStudyGroups !== 'function') return '';
+  const unresolved = getUnresolvedCETStudyGroups();
+  if(!unresolved.length) return '';
+  const items = unresolved.map(({cls, assignment:a}) => {
+    const tutor = getTutorById(a.tutorId);
+    return `<li><strong>${escapeHtml(tutor ? tutor.name : 'Tutor')}</strong> — ${escapeHtml(cls.title || 'CET class')}: ${escapeHtml(a.sgNote || 'Study group needs manual time.')}</li>`;
+  }).join('');
+  return `<div class="sg-warning-banner"><div><strong><i class="ti ti-alert-triangle"></i> Study groups needing manual time</strong><ul>${items}</ul></div></div>`;
+}
+
 // ── Schedule Generation, Rendering & Export ─────────────────
 function generateSchedule(){
   if(!validateScheduleSettings()) return;
@@ -10,6 +102,7 @@ function generateSchedule(){
     return;
   }
 
+  if(typeof resetCETStudyGroupStatus === 'function') resetCETStudyGroupStatus();
   tutors.forEach(t=>{ t.assignedHrs=(typeof getCETHoursFor==='function'?getCETHoursFor(t.id):0); t.assignments=[]; });
 
   const allSlots=[];
@@ -18,10 +111,13 @@ function generateSchedule(){
     times.forEach(t=>allSlots.push({day,time:t,assigned:[]}));
   });
 
+  const unresolvedSG = autoPlaceCETStudyGroups(allSlots);
+
   allSlots.forEach(slot=>{
     const eligible=tutors.filter(t=>{
       const key=slot.day+'-'+slot.time;
       return t.avail[key]===true
+        && !scheduleSlotHasTutor(slot, t.id)
         && !(typeof isTutorBusyWithCET==='function' && isTutorBusyWithCET(t,slot.day,slot.time))
         && t.assignedHrs<t.hrs
         && !wouldExceedConsecutiveLimit(t,slot.day,slot.time,allSlots);
@@ -42,6 +138,9 @@ function generateSchedule(){
   showAllGaps = false;
 
   renderOutput(allSlots);
+  if(unresolvedSG && unresolvedSG.length){
+    showToast(`${unresolvedSG.length} study group${unresolvedSG.length!==1?'s':''} could not be placed automatically. Please assign manually.`, 'warn', 6500);
+  }
 }
 
 // ── Expand/collapse uncovered slots ───────────────────────
@@ -187,6 +286,7 @@ function renderOutput(slots){
   });
 
   let html='';
+  html += cetStudyGroupWarningBanner();
   if(addHoursMode){
     const at=getTutorById(addHoursMode.tutorId);
     const remaining=at ? Math.max(0,(Number(at.hrs)||0)-(Number(at.assignedHrs)||0)) : 0;
@@ -244,10 +344,11 @@ function renderOutput(slots){
       let pills='';
       assignedHere.forEach(tt=>{
         const c=colorFor(tutors.findIndex(x=>String(x.id)===String(tt.id)));
-        const mode=displayModeShortForDay(tt, day);
+        const isSG = tt._type === 'sg';
+        const mode=isSG ? 'SG' : displayModeShortForDay(tt, day);
         const info=shiftInfo[day+'-'+t+'-'+tt.id];
         const isMerged=info&&info.runLen>1;
-        const pillClass=isMerged?'pill-merged':'pill';
+        const pillClass=(isMerged?'pill-merged':'pill') + (isSG ? ' sg-pill' : '');
 
         let timeLabel='';
         if(isMerged&&info.isStart){
@@ -257,13 +358,14 @@ function renderOutput(slots){
           // continuation row — show a faint continuation indicator, not a full pill
           const editClass=moveMode&&String(moveMode.tutorId)===String(tt.id)&&moveMode.day===day&&moveMode.time===t?' move-source':'';
           const focusClass=focusedTutorId?(String(focusedTutorId)===String(tt.id)?' focus-match':' focus-nonmatch'):'';
-          pills+=`<span class="pill${editClass}${focusClass}" onmouseenter="showTutorQuickSummary(event,${tt.id},'${day}')" onmousemove="moveTutorQuickSummary(event)" onmouseleave="hideTutorQuickSummary()" onclick="openShiftPopover(event,${tt.id},'${day}','${t}')" style="background:${c.bg};color:${c.text};border:1px dashed ${c.border};opacity:.72;font-size:9px;">${tt.name.split(' ')[0]} ···</span>`;
+          pills+=`<span class="pill${isSG?' sg-pill':''}${editClass}${focusClass}" onmouseenter="showTutorQuickSummary(event,${tt.id},'${day}')" onmousemove="moveTutorQuickSummary(event)" onmouseleave="hideTutorQuickSummary()" onclick="openShiftPopover(event,${tt.id},'${day}','${t}')" style="background:${isSG?'#eaf3de':c.bg};color:${isSG?'#27500a':c.text};border:1px dashed ${isSG?'#8bc46b':c.border};opacity:.72;font-size:9px;">${isSG?'SG ':''}${tt.name.split(' ')[0]} ···</span>`;
           return;
         }
 
         const editClass=moveMode&&String(moveMode.tutorId)===String(tt.id)&&moveMode.day===day&&moveMode.time===t?' move-source':'';
         const focusClass=focusedTutorId?(String(focusedTutorId)===String(tt.id)?' focus-match':' focus-nonmatch'):'';
-        pills+=`<span class="${pillClass}${editClass}${focusClass}" onmouseenter="showTutorQuickSummary(event,${tt.id},'${day}')" onmousemove="moveTutorQuickSummary(event)" onmouseleave="hideTutorQuickSummary()" onclick="openShiftPopover(event,${tt.id},'${day}','${t}')" style="background:${c.bg};color:${c.text};border:1.5px solid ${c.border}">${tt.name.split(' ')[0]} ${mode}${timeLabel}</span>`;
+        const labelText = isSG ? `SG ${tt.name.split(' ')[0]}` : `${tt.name.split(' ')[0]} ${mode}`;
+        pills+=`<span class="${pillClass}${editClass}${focusClass}" onmouseenter="showTutorQuickSummary(event,${tt.id},'${day}')" onmousemove="moveTutorQuickSummary(event)" onmouseleave="hideTutorQuickSummary()" onclick="openShiftPopover(event,${tt.id},'${day}','${t}')" style="background:${isSG?'#eaf3de':c.bg};color:${isSG?'#27500a':c.text};border:1.5px solid ${isSG?'#8bc46b':c.border}">${labelText}${timeLabel}</span>`;
       });
 
       html+=`<td class="${cellClass}" onclick="handleScheduleCellClickGuarded('${day}','${t}')">${pills}</td>`;

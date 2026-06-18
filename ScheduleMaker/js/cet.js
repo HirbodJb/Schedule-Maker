@@ -850,7 +850,10 @@ function normalizeCETClass(cls){
     startTime: a.startTime || cls.startTime || '',
     endTime: a.endTime || cls.endTime || '',
     weeklyHours: Number(a.weeklyHours ?? calcCETAssignmentHours(a) ?? 0),
-    note: a.note || ''
+    note: a.note || '',
+    sgStatus: a.sgStatus || 'pending',
+    sgPlacement: a.sgPlacement || null,
+    sgNote: a.sgNote || ''
   })).filter(a => a.tutorId && a.days.length && a.weeklyHours > 0);
 
   return cls;
@@ -977,7 +980,11 @@ function tutorCETRemainingHrs(tutor){
 }
 
 function getCETHoursFor(tutorId){
-  return getCETAssignmentsForTutor(tutorId).reduce((s,x)=>s + Number(x.assignment.weeklyHours || 0), 0);
+  return getCETAssignmentsForTutor(tutorId).reduce((s,x)=>{
+    const a = x.assignment;
+    const sgHours = a.sgPlacement && Number(a.sgPlacement.weeklyHours || 0) ? Number(a.sgPlacement.weeklyHours || 0) : 0;
+    return s + Number(a.weeklyHours || 0) + sgHours;
+  }, 0);
 }
 
 function isTutorBusyWithCET(tutorOrId, day, time){
@@ -985,12 +992,62 @@ function isTutorBusyWithCET(tutorOrId, day, time){
   const slotStart = timeToMins(time);
   const slotEnd = slotStart + 30;
   return getCETAssignmentsForTutor(tutorId).some(({assignment:a}) => {
-    if(!a.days || !a.days.includes(day)) return false;
-    const aStart = timeToMins(a.startTime);
-    const aEnd = timeToMins(a.endTime);
-    return slotStart < aEnd && slotEnd > aStart;
+    const overlaps = (startTime, endTime, days) => {
+      if(!days || !days.includes(day) || !startTime || !endTime) return false;
+      const aStart = timeToMins(startTime);
+      const aEnd = timeToMins(endTime);
+      return slotStart < aEnd && slotEnd > aStart;
+    };
+    if(overlaps(a.startTime, a.endTime, a.days)) return true;
+    if(a.sgPlacement && overlaps(a.sgPlacement.startTime, a.sgPlacement.endTime, [a.sgPlacement.day])) return true;
+    return false;
   });
 }
+
+function assignmentNeedsStudyGroup(cls, assignment){
+  return !!(cls && cls.wantsCET && cls.requiresStudyGroup !== false && assignment);
+}
+
+function resetCETStudyGroupStatus(){
+  normalizeAllCETClasses();
+  cetClasses.forEach(cls => {
+    (cls.assignments || []).forEach(a => {
+      if(assignmentNeedsStudyGroup(cls, a)){
+        a.sgStatus = 'pending';
+        a.sgPlacement = null;
+        a.sgNote = 'Study group has not been scheduled yet.';
+      } else {
+        a.sgStatus = 'not-needed';
+        a.sgPlacement = null;
+        a.sgNote = '';
+      }
+    });
+  });
+}
+
+function getUnresolvedCETStudyGroups(){
+  normalizeAllCETClasses();
+  const out = [];
+  cetClasses.forEach(cls => {
+    (cls.assignments || []).forEach(a => {
+      if(assignmentNeedsStudyGroup(cls, a) && a.sgStatus !== 'scheduled'){
+        out.push({cls, assignment:a});
+      }
+    });
+  });
+  return out;
+}
+
+function getCETStudyGroupWarningsHTML(){
+  const unresolved = getUnresolvedCETStudyGroups();
+  if(!unresolved.length) return '';
+  return unresolved.map(({cls, assignment:a}) => {
+    const tutor = tutors.find(t => String(t.id) === String(a.tutorId));
+    const who = tutor ? tutor.name : 'Tutor';
+    return `<div><strong>${cetEsc(who)}</strong> needs a manual SG time for <strong>${cetEsc(cls.title || 'this class')}</strong>. ${cetEsc(a.sgNote || '')}</div>`;
+  }).join('');
+}
+
 
 function classAssignmentCount(cls){
   normalizeCETClass(cls);
@@ -1052,6 +1109,7 @@ function renderCET(){
       const isFocused = cetFocusedTutorId === t.id;
       const pct = Math.min(100, Math.round(cetHrs / Math.max(Number(t.hrs)||1,1) * 100));
       const assignedCount = getCETAssignmentsForTutor(t.id).length;
+      const unresolvedSGCount = getCETAssignmentsForTutor(t.id).filter(x => assignmentNeedsStudyGroup(x.cls, x.assignment) && x.assignment.sgStatus !== 'scheduled').length;
       html += `<div class="cet-tutor-row ${isFocused?'cet-tutor-focused':''}" onclick="toggleCETFocus(${t.id})" style="--tc:${c.text};--tbg:${c.bg};--tb:${c.border}">
         <div class="h-av" style="background:${c.bg};color:${c.text};width:32px;height:32px;font-size:11px">${initials(t.name)}</div>
         <div style="flex:1;min-width:0">
@@ -1059,6 +1117,7 @@ function renderCET(){
           <div style="font-size:10px;color:var(--muted);margin-top:2px">
             ${cetHrs > 0 ? `${formatCETHours(cetHrs)} CET · ${formatCETHours(remaining)} left for CAS` : `${t.hrs}h available · no CET yet`}
             ${assignedCount > 0 ? ` · ${assignedCount} block${assignedCount!==1?'s':''}` : ''}
+            ${unresolvedSGCount > 0 ? ` · ⚠ ${unresolvedSGCount} SG` : ''}
           </div>
           ${cetHrs > 0 ? `<div class="h-bar-wrap" style="margin-top:4px"><div class="h-bar" style="width:${pct}%;background:${c.text}"></div></div>` : ''}
         </div>${isFocused ? `<span class="cet-focused-badge">Focusing</span>` : ''}</div>`;
@@ -1123,7 +1182,7 @@ function renderClassCard(cls){
         const c = cetColorFor(tutor.id);
         html += `<div class="cet-assignment-pill" style="background:${c.bg};color:${c.text};border:1.5px solid ${c.border}">
           <div class="avatar" style="background:${c.bg};color:${c.text};width:22px;height:22px;font-size:9px;flex-shrink:0">${initials(tutor.name)}</div>
-          <div class="cet-assignment-info"><strong>${cetEsc(tutor.name)}</strong><span>${cetAssignmentTimeLabel(a)} · ${formatCETHours(a.weeklyHours)}/wk</span></div>
+          <div class="cet-assignment-info"><strong>${cetEsc(tutor.name)}</strong><span>${cetAssignmentTimeLabel(a)} · ${formatCETHours(a.weeklyHours)}/wk</span>${assignmentNeedsStudyGroup(cls,a) ? (a.sgStatus === 'scheduled' && a.sgPlacement ? `<span class="cet-sg-ok">SG ${a.sgPlacement.day.slice(0,3)} · ${fmtTime(a.sgPlacement.startTime)}–${fmtTime(a.sgPlacement.endTime)}</span>` : `<span class="cet-sg-warning">⚠ SG needs manual time</span>`) : ''}</div>
           <button class="cet-pill-remove" onclick="removeCETAssignment(${cls.id}, ${a.id})" title="Remove this tutor"><i class="ti ti-x"></i></button>
         </div>`;
       });
@@ -1252,17 +1311,21 @@ function saveCETAssignment(classId){
 
   const remaining = tutorCETRemainingHrs(tutor);
   const addNow = () => {
+    const needsSG = assignmentNeedsStudyGroup(cls, {tutorId:tutor.id});
     cls.assignments.push({
       id: Date.now() + Math.random(),
       tutorId: tutor.id,
       days: draft.days,
       startTime: draft.startTime,
       endTime: draft.endTime,
-      weeklyHours: draft.weeklyHours
+      weeklyHours: draft.weeklyHours,
+      sgStatus: needsSG ? 'pending' : 'not-needed',
+      sgPlacement: null,
+      sgNote: needsSG ? 'Study group will be auto-placed when the schedule is generated if a before/after class slot is available.' : ''
     });
     closeCETAssignModal();
     renderCET();
-    showToast(`${tutor.name} added to ${cls.title}. ${formatCETHours(draft.weeklyHours)} deducted from CAS hours.`, 'ok', 4500);
+    showToast(`${tutor.name} added to ${cls.title}. ${formatCETHours(draft.weeklyHours)} deducted from CAS hours.${needsSG ? ' SG will be checked during schedule generation.' : ''}`, 'ok', 5500);
   };
 
   const warnings = [];

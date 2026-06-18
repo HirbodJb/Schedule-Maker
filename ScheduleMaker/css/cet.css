@@ -365,3 +365,36 @@
 @media(max-width:520px){
   .cet-time-picker{grid-template-columns:1fr auto 1fr 1fr}
 }
+
+
+/* ── Study group status inside CET cards ─────────────────── */
+.cet-sg-warning{
+  display:inline-flex;
+  align-items:center;
+  gap:4px;
+  margin-top:3px;
+  color:var(--warn);
+  background:var(--warn-bg);
+  border:1px solid var(--warn-b);
+  border-radius:999px;
+  padding:2px 7px;
+  font-size:10px!important;
+  font-weight:900!important;
+  opacity:1!important;
+  width:max-content;
+}
+.cet-sg-ok{
+  display:inline-flex;
+  align-items:center;
+  gap:4px;
+  margin-top:3px;
+  color:var(--ok);
+  background:var(--ok-bg);
+  border:1px solid var(--ok-b);
+  border-radius:999px;
+  padding:2px 7px;
+  font-size:10px!important;
+  font-weight:900!important;
+  opacity:1!important;
+  width:max-content;
+}

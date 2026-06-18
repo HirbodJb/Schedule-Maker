@@ -1301,3 +1301,50 @@ input:focus,select:focus{outline:none;border-color:var(--red);box-shadow:0 0 0 3
   font-weight:800;
 }
 .schedule-validation-error.show{display:flex}
+
+
+/* ── Auto-placed CET study group blocks ─────────────────── */
+.sg-pill,
+.pill.sg-pill,
+.pill-merged.sg-pill{
+  background:#eaf3de!important;
+  color:#27500a!important;
+  border-color:#8bc46b!important;
+  border-left-color:#27500a!important;
+}
+.sg-pill::before{
+  content:'SG';
+  display:inline-block;
+  font-size:8px;
+  font-weight:900;
+  letter-spacing:.04em;
+  background:#27500a;
+  color:#fff;
+  border-radius:999px;
+  padding:1px 4px;
+  margin-right:4px;
+  vertical-align:1px;
+}
+.sg-warning-banner{
+  background:var(--warn-bg);
+  border:1px solid var(--warn-b);
+  color:var(--warn);
+  border-radius:14px;
+  padding:12px 14px;
+  margin-bottom:14px;
+  font-size:12px;
+  font-weight:750;
+  box-shadow:0 8px 24px rgba(122,80,0,.08);
+}
+.sg-warning-banner strong{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  font-size:13px;
+  margin-bottom:6px;
+}
+.sg-warning-banner ul{
+  margin:0;
+  padding-left:18px;
+  line-height:1.55;
+}

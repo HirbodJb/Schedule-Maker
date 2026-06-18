@@ -22,5 +22,6 @@ let undoMeta = null;
 let scheduleSettings = {weeklyBudget:null, dateFrom:'', dateTo:''};
 let cetClasses = [];
 let cetFocusedTutorId = null;
+let cetStudyGroupWarnings = [];
 
 // ── Availability table ───────────────────────────────────
