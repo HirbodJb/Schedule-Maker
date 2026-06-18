@@ -1277,7 +1277,9 @@ function openCETAssignModal(classId){
   const ov = document.createElement('div');
   ov.id = 'cet-assign-overlay';
   ov.className = 'cet-modal-overlay';
-  const classDays = Array.isArray(cls.days) && cls.days.length ? cls.days : ALL_DAYS;
+  const allowedDays = (typeof activeScheduleDays === 'function') ? activeScheduleDays() : ALL_DAYS;
+  const classDaysRaw = Array.isArray(cls.days) && cls.days.length ? cls.days : allowedDays;
+  const classDays = classDaysRaw.filter(d => allowedDays.includes(d));
   const focused = cetFocusedTutorId || '';
 
   ov.innerHTML = `<div class="cet-modal cet-assign-modal" role="dialog" aria-modal="true">
@@ -1828,7 +1830,9 @@ function openCETAssignModal(classId){
   const ov = document.createElement('div');
   ov.id = 'cet-assign-overlay';
   ov.className = 'cet-modal-overlay';
-  const classDays = Array.isArray(cls.days) && cls.days.length ? cls.days : ALL_DAYS;
+  const allowedDays = (typeof activeScheduleDays === 'function') ? activeScheduleDays() : ALL_DAYS;
+  const classDaysRaw = Array.isArray(cls.days) && cls.days.length ? cls.days : allowedDays;
+  const classDays = classDaysRaw.filter(d => allowedDays.includes(d));
   const focused = cetFocusedTutorId || '';
   const courseworkHours = Math.max(0, Number(cls.hrsPerWeek || 0) - (needsSG ? 1 : 0));
 
@@ -1844,13 +1848,15 @@ function openCETAssignModal(classId){
         <div class="fg"><span class="fl">Calculated hours</span><div class="cet-calc-box" id="ca-hours-preview">Select tutor${isAsync && needsSG ? ' and SG time' : ' and times'}</div></div>
       </div>
 
+      ${!isAsync && !classDays.length ? `<div class="cet-assign-warning" style="display:block;margin-top:12px">This class has no meeting days inside the selected semester operating days.</div>` : ''}
+
       ${isAsync ? `
         <div class="cet-async-note"><strong>Async class:</strong> no class meeting day/time is needed. ${formatCETHours(courseworkHours)} is counted as coursework/keeping-up time.${needsSG ? ' Choose the 1-hour study group time below.' : ''}</div>
         ${needsSG ? `
         <div class="form-grid" style="margin-top:12px;grid-template-columns:1fr 1fr">
           <div class="fg"><span class="fl">SG day</span><select id="ca-sg-day" onchange="updateCETAssignPreview(${cls.id})">
             <option value="">— Select day —</option>
-            ${ALL_DAYS.map(d=>`<option value="${d}">${d}</option>`).join('')}
+            ${allowedDays.map(d=>`<option value="${d}">${d}</option>`).join('')}
           </select></div>
           <div class="fg"><span class="fl">SG start time</span>${cetTimePickerHTML('ca-sg-start', '', `updateCETAssignPreview(${cls.id})`)}</div>
         </div>` : ''}

@@ -161,3 +161,64 @@ function showStatus(containerId, msg, type){
 }
 
 // ── Status helper ────────────────────────────────────────
+
+
+// ── Schedule settings helpers ─────────────────────────────
+function syncScheduleSettingsFromInputs(options={}){
+  if(typeof scheduleSettings === 'undefined') window.scheduleSettings = {};
+  const semEl = document.getElementById('schedule-semester-type');
+  const budgetEl = document.getElementById('schedule-budget');
+  const fromEl = document.getElementById('schedule-date-from');
+  const toEl = document.getElementById('schedule-date-to');
+  scheduleSettings.semesterType = semEl && semEl.value ? semEl.value : (scheduleSettings.semesterType || 'regular');
+  scheduleSettings.weeklyBudget = budgetEl && budgetEl.value !== '' ? parseFloat(budgetEl.value) : null;
+  scheduleSettings.dateFrom = fromEl ? fromEl.value : (scheduleSettings.dateFrom || '');
+  scheduleSettings.dateTo = toEl ? toEl.value : (scheduleSettings.dateTo || '');
+  updateScheduleSettingsNote();
+  if(typeof updateScheduleStats === 'function') updateScheduleStats();
+  if(!(options && options.silentRender) && typeof currentSlots !== 'undefined' && currentSlots && currentSlots.length && typeof renderOutput === 'function') renderOutput(currentSlots);
+}
+
+function applyScheduleSettingsToInputs(){
+  if(typeof scheduleSettings === 'undefined') window.scheduleSettings = {};
+  if(!scheduleSettings.semesterType) scheduleSettings.semesterType = 'regular';
+  const semEl = document.getElementById('schedule-semester-type');
+  const budgetEl = document.getElementById('schedule-budget');
+  const fromEl = document.getElementById('schedule-date-from');
+  const toEl = document.getElementById('schedule-date-to');
+  if(semEl) semEl.value = scheduleSettings.semesterType || 'regular';
+  if(budgetEl) budgetEl.value = scheduleSettings.weeklyBudget ?? '';
+  if(fromEl) fromEl.value = scheduleSettings.dateFrom || '';
+  if(toEl) toEl.value = scheduleSettings.dateTo || '';
+  updateScheduleSettingsNote();
+}
+
+function schedulePeriodText(){
+  const parts = [];
+  if(typeof semesterTypeLabel === 'function') parts.push(semesterTypeLabel());
+  if(scheduleSettings && scheduleSettings.dateFrom && scheduleSettings.dateTo) parts.push(`${scheduleSettings.dateFrom} to ${scheduleSettings.dateTo}`);
+  else if(scheduleSettings && scheduleSettings.dateFrom) parts.push(`From ${scheduleSettings.dateFrom}`);
+  else if(scheduleSettings && scheduleSettings.dateTo) parts.push(`Until ${scheduleSettings.dateTo}`);
+  return parts.join(' · ') || 'Weekly schedule';
+}
+
+function updateScheduleSettingsNote(){
+  const note = document.getElementById('schedule-settings-note');
+  if(!note) return;
+  const operating = typeof semesterOperatingNote === 'function' ? semesterOperatingNote() : '';
+  note.innerHTML = `<strong>Operating hours:</strong> ${escapeHtml(operating)}. Weekly budget and the 4-hour continuous-work limit still apply.`;
+}
+
+function validateScheduleSettings(){
+  const error = document.getElementById('schedule-validation-error');
+  const msg = document.getElementById('schedule-validation-message');
+  const from = scheduleSettings && scheduleSettings.dateFrom;
+  const to = scheduleSettings && scheduleSettings.dateTo;
+  if(from && to && from > to){
+    if(msg) msg.textContent = 'Schedule start date cannot be after the end date.';
+    if(error) error.classList.add('show');
+    return false;
+  }
+  if(error) error.classList.remove('show');
+  return true;
+}

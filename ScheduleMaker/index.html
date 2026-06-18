@@ -238,6 +238,14 @@ See LICENSE.txt for full terms.
 
     <div class="schedule-settings" aria-label="Schedule settings">
       <div class="fg">
+        <span class="fl">Semester type</span>
+        <select id="schedule-semester-type" onchange="syncScheduleSettingsFromInputs()">
+          <option value="regular">Fall / Spring</option>
+          <option value="summer">Summer</option>
+          <option value="winter">Winter</option>
+        </select>
+      </div>
+      <div class="fg">
         <span class="fl">Weekly hour budget</span>
         <input id="schedule-budget" type="number" min="0" step="0.5" placeholder="e.g. 20" oninput="syncScheduleSettingsFromInputs()">
       </div>
@@ -250,7 +258,7 @@ See LICENSE.txt for full terms.
         <input id="schedule-date-to" type="date" onchange="syncScheduleSettingsFromInputs()">
       </div>
       <div class="setting-note" id="schedule-settings-note">
-        Optional: set a weekly budget so generated tutor hours do not exceed that total. The 4-hour continuous-work limit is still enforced with a required 30-minute break before more work.
+        Choose the semester type first so the correct operating hours apply. Fall/Spring keeps Friday online-only; Summer/Winter use Monday–Thursday 11:00am–4:00pm and ignore Friday availability.
       </div>
       <div class="schedule-validation-error" id="schedule-validation-error">
         <i class="ti ti-alert-triangle"></i> <span id="schedule-validation-message"></span>

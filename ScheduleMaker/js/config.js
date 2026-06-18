@@ -28,15 +28,64 @@ function metadataHiddenBlock(){
 const DAYS_MF = ['Monday','Tuesday','Wednesday','Thursday'];
 const TIMES_MF = ['9:00','9:30','10:00','10:30','11:00','11:30','12:00','12:30','13:00','13:30','14:00','14:30','15:00','15:30','16:00','16:30'];
 const TIMES_FRI = ['10:00','10:30','11:00','11:30','12:00','12:30','13:00','13:30'];
+const TIMES_SUMMER_WINTER = ['11:00','11:30','12:00','12:30','13:00','13:30','14:00','14:30','15:00','15:30'];
 const ALL_DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday'];
+const SEMESTER_TYPES = Object.freeze({
+  regular: { label:'Fall / Spring', note:'Mon–Thu 9:00am–5:00pm · Friday 10:00am–2:00pm online only' },
+  summer:  { label:'Summer',        note:'Mon–Thu 11:00am–4:00pm · Friday closed' },
+  winter:  { label:'Winter',        note:'Mon–Thu 11:00am–4:00pm · Friday closed' }
+});
 
 // Work policy: a tutor may not be scheduled for more than 4 consecutive hours.
 // Since the schedule uses 30-minute slots, 4 hours = 8 back-to-back slots.
 // After that, the tutor must have at least one 30-minute break before being assigned again.
 const MAX_CONSECUTIVE_WORK_SLOTS = 8;
 
+function currentSemesterType(){
+  // Prefer the live dropdown value when the Schedule pane is open.
+  // This makes operating-hour helpers immediately respect Summer/Winter
+  // even before/while scheduleSettings is being synced.
+  const semEl = (typeof document !== 'undefined') ? document.getElementById('schedule-semester-type') : null;
+  if(semEl && semEl.value) return semEl.value;
+
+  return (typeof scheduleSettings !== 'undefined' && scheduleSettings && scheduleSettings.semesterType)
+    ? scheduleSettings.semesterType
+    : 'regular';
+}
+
+function isShortTermSemester(){
+  const type = currentSemesterType();
+  return type === 'summer' || type === 'winter';
+}
+
+function semesterTypeLabel(type=currentSemesterType()){
+  return (SEMESTER_TYPES[type] && SEMESTER_TYPES[type].label) || SEMESTER_TYPES.regular.label;
+}
+
+function semesterOperatingNote(type=currentSemesterType()){
+  return (SEMESTER_TYPES[type] && SEMESTER_TYPES[type].note) || SEMESTER_TYPES.regular.note;
+}
+
+function activeScheduleDays(){
+  return isShortTermSemester() ? DAYS_MF : ALL_DAYS;
+}
+
+function activeScheduleGridTimes(){
+  return isShortTermSemester() ? TIMES_SUMMER_WINTER : TIMES_MF;
+}
+
+function isOperationalDay(day){
+  return activeScheduleDays().includes(day);
+}
+
 function timesForDay(day){
+  if(!isOperationalDay(day)) return [];
+  if(isShortTermSemester()) return TIMES_SUMMER_WINTER;
   return day === 'Friday' ? TIMES_FRI : TIMES_MF;
+}
+
+function isOperationalSlot(day, time){
+  return timesForDay(day).includes(time);
 }
 
 const COLORS = [

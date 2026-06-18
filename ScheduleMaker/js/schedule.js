@@ -115,6 +115,14 @@ function cetStudyGroupWarningBanner(){
 
 // ── Schedule Generation, Rendering & Export ─────────────────
 function generateSchedule(){
+  // Always read the latest semester dropdown before generating.
+  // This prevents Summer/Winter schedules from accidentally using the old
+  // Fall/Spring Friday rules when the dropdown was changed but not synced yet.
+  const semEl = document.getElementById('schedule-semester-type');
+  if(typeof scheduleSettings !== 'undefined' && semEl && semEl.value){
+    scheduleSettings.semesterType = semEl.value;
+  }
+  if(typeof syncScheduleSettingsFromInputs === 'function') syncScheduleSettingsFromInputs({ silentRender:true });
   if(!validateScheduleSettings()) return;
   if(currentSlots.length || tutors.some(t=>t.assignedHrs>0 || (t.assignments&&t.assignments.length)) || currentAnalysisReportText){
     saveUndoState('regenerated schedule');
@@ -129,9 +137,8 @@ function generateSchedule(){
   tutors.forEach(t=>{ t.assignedHrs=(typeof getCETHoursFor==='function'?getCETHoursFor(t.id):0); t.assignments=[]; });
 
   const allSlots=[];
-  ALL_DAYS.forEach(day=>{
-    const times=day==='Friday'?TIMES_FRI:TIMES_MF;
-    times.forEach(t=>allSlots.push({day,time:t,assigned:[]}));
+  activeScheduleDays().forEach(day=>{
+    timesForDay(day).forEach(t=>allSlots.push({day,time:t,assigned:[]}));
   });
 
   const unresolvedSG = autoPlaceCETStudyGroups(allSlots);
@@ -139,7 +146,8 @@ function generateSchedule(){
   allSlots.forEach(slot=>{
     const eligible=tutors.filter(t=>{
       const key=slot.day+'-'+slot.time;
-      return t.avail[key]===true
+      return (typeof isOperationalSlot !== 'function' || isOperationalSlot(slot.day, slot.time))
+        && t.avail[key]===true
         && !scheduleSlotHasTutor(slot, t.id)
         && !(typeof isTutorBusyWithCET==='function' && isTutorBusyWithCET(t,slot.day,slot.time))
         && t.assignedHrs<t.hrs
@@ -318,6 +326,7 @@ function showStudyGroupQuickSummary(event, tutorId, day, classId, assignmentId){
 // These are not tutoring-center coverage and do not add hours.
 // They only make CET commitments visible in the schedule view.
 function getCETDisplayBlocksForSlot(day, time){
+  if(typeof isOperationalSlot === 'function' && !isOperationalSlot(day, time)) return [];
   if(typeof cetClasses === 'undefined' || !Array.isArray(cetClasses)) return [];
   if(typeof normalizeAllCETClasses === 'function') normalizeAllCETClasses();
 
@@ -395,10 +404,12 @@ function renderOutput(slots){
   const slotMap={};
   slots.forEach(s=>slotMap[s.day+'-'+s.time]=s);
 
+  const scheduleDays = activeScheduleDays();
+  const scheduleTimes = activeScheduleGridTimes();
+
   const cetDisplayMap = {};
-  ALL_DAYS.forEach(day => {
-    const times = day === 'Friday' ? TIMES_FRI : TIMES_MF;
-    times.forEach(t => {
+  scheduleDays.forEach(day => {
+    timesForDay(day).forEach(t => {
       cetDisplayMap[day + '-' + t] = getCETDisplayBlocksForSlot(day, t);
     });
   });
@@ -407,23 +418,23 @@ function renderOutput(slots){
 
   // Detect consecutive runs per tutor per day — for merged pill label only (no rowspan)
   const shiftInfo={}; // "day-time-tutorId-type" => {isStart, runLen, startTime}
-  ALL_DAYS.forEach(day=>{
+  scheduleDays.forEach(day=>{
     tutors.forEach(tutor=>{
       ['shift','sg','cet-display'].forEach(typeKey=>{
         let runStart=null, runLen=0;
         const flush=()=>{
           if(runLen>0&&runStart!==null){
-            const si=TIMES_MF.indexOf(runStart);
+            const dayTimes = timesForDay(day);
+            const si=dayTimes.indexOf(runStart);
             for(let i=0;i<runLen;i++){
-              const t=TIMES_MF[si+i];
+              const t=dayTimes[si+i];
               if(t) shiftInfo[day+'-'+t+'-'+tutor.id+'-'+typeKey]={isStart:i===0,runLen,startTime:runStart,typeKey};
             }
           }
           runStart=null;runLen=0;
         };
 
-        TIMES_MF.forEach(t=>{
-          if(day==='Friday'&&!TIMES_FRI.includes(t)){flush();return;}
+        timesForDay(day).forEach(t=>{
           const slot=slotMap[day+'-'+t];
           const assignedForRuns = [
             ...(slot && slot.assigned ? slot.assigned : []),
@@ -464,17 +475,15 @@ function renderOutput(slots){
   html+='<div class="split">';
 
   // ── Left: grid ──
-  html+=`<div class="panel ${focusedTutorId?'focus-mode':''}"><div class="panel-title">Weekly schedule grid</div><div class="schedule-period-label"><i class="ti ti-calendar-time"></i> ${escapeHtml(schedulePeriodText())}${scheduleSettings.weeklyBudget?` · Weekly budget: ${scheduleSettings.weeklyBudget.toFixed(1)}h`:''} · Friday shifts display as online</div><div class="sched-wrap"><table class="sched-table">`;
+  const operatingNote = typeof semesterOperatingNote === 'function' ? semesterOperatingNote() : 'Friday shifts display as online';
+  html+=`<div class="panel ${focusedTutorId?'focus-mode':''}"><div class="panel-title">Weekly schedule grid</div><div class="schedule-period-label"><i class="ti ti-calendar-time"></i> ${escapeHtml(schedulePeriodText())}${scheduleSettings.weeklyBudget?` · Weekly budget: ${scheduleSettings.weeklyBudget.toFixed(1)}h`:''} · ${escapeHtml(operatingNote)}</div><div class="sched-wrap"><table class="sched-table">`;
   html+='<thead><tr><th style="width:92px">Time</th>';
-  ALL_DAYS.forEach(d=>html+=`<th>${d}</th>`);
+  scheduleDays.forEach(d=>html+=`<th>${d}</th>`);
   html+='</tr></thead><tbody>';
 
-  TIMES_MF.forEach(t=>{
+  scheduleTimes.forEach(t=>{
     html+=`<tr><td class="th">${fmtInterval(t)}</td>`;
-    ALL_DAYS.forEach(day=>{
-      const isFri=day==='Friday', inFri=TIMES_FRI.includes(t);
-      // Friday out-of-range: grey cell, always emit td to keep column count right
-      if(isFri&&!inFri){html+=`<td style="background:var(--soft);border-right:1px solid var(--line)"></td>`;return;}
+    scheduleDays.forEach(day=>{
 
       const slot=slotMap[day+'-'+t];
       const assignedHere=[...(slot && slot.assigned ? slot.assigned : []), ...(cetDisplayMap[day+'-'+t] || [])];
@@ -511,7 +520,7 @@ function renderOutput(slots){
 
         let timeLabel='';
         if(isMerged&&info.isStart){
-          const endTime=TIMES_MF[TIMES_MF.indexOf(info.startTime)+info.runLen];
+          const endTime=timesForDay(day)[timesForDay(day).indexOf(info.startTime)+info.runLen];
           timeLabel=`<span class="pill-time">${fmtTime(info.startTime)}–${endTime?fmtTime(endTime):'end'}</span>`;
         } else if(isMerged&&!info.isStart){
           // continuation row — show a faint continuation indicator, not a full pill
@@ -624,17 +633,14 @@ function renderOutput(slots){
 // ── Export schedule ──────────────────────────────────────
 function scheduleExportRows(){
   const rows = [];
-  const header = ['Time', ...ALL_DAYS];
+  const days = activeScheduleDays();
+  const times = activeScheduleGridTimes();
+  const header = ['Time', ...days];
   rows.push(header);
 
-  TIMES_MF.forEach(time => {
+  times.forEach(time => {
     const row = [fmtInterval(time)];
-    ALL_DAYS.forEach(day => {
-      if(day==='Friday' && !TIMES_FRI.includes(time)){
-        row.push('');
-        return;
-      }
-
+    days.forEach(day => {
       const slot = getSlot(day,time);
       if(!slot || !slot.assigned.length){
         row.push('');
@@ -824,6 +830,11 @@ window.addEventListener('error', function(e){
 // reserved by one of their CET blocks. The auto-generator already checks this;
 // this guard makes manual Add behave the same way.
 function handleScheduleCellClickGuarded(day, time){
+  if(typeof isOperationalSlot === 'function' && !isOperationalSlot(day, time)){
+    showToast(`${day} ${fmtInterval(time)} is outside the selected semester operating hours.`, 'warn', 4200);
+    return;
+  }
+
   if(addHoursMode && addHoursMode.tutorId && typeof isTutorBusyWithCET === 'function'){
     const tutor = getTutorById(addHoursMode.tutorId);
     if(tutor && isTutorBusyWithCET(tutor, day, time)){
