@@ -456,7 +456,6 @@ function saveTutorEdit(id){
   closeEditTutorModal();
   resetRosterSearchResults();
   renderTutors();
-  if(typeof markScheduleNeedsRegeneration === 'function') markScheduleNeedsRegeneration('roster changes');
   showToast(`${escapeHtml(name)} was updated.`, 'ok');
 }
 
@@ -488,7 +487,6 @@ function removeTutor(id){
       }
 
       renderTutors();
-      if(typeof markScheduleNeedsRegeneration === 'function') markScheduleNeedsRegeneration('roster changes');
       showToast(`${escapeHtml(tutor.name)} was removed from the roster.`, 'ok');
     },
     'Remove tutor'

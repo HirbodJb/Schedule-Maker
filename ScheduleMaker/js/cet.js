@@ -670,7 +670,6 @@ function saveClassModal(isEdit, editId){
 
   closeClassModal();
   renderCET();
-  if(typeof markScheduleNeedsRegeneration === 'function') markScheduleNeedsRegeneration('CET class changes');
   showToast(isEdit ? 'Class updated.' : `"${title}" added.`, 'ok', 2500);
 }
 
@@ -685,7 +684,6 @@ function deleteCETClass(classId){
     () => {
       cetClasses = cetClasses.filter(c => c.id !== classId);
       renderCET();
-      if(typeof markScheduleNeedsRegeneration === 'function') markScheduleNeedsRegeneration('CET class changes');
     },
     'Remove'
   );
@@ -795,7 +793,6 @@ function importBulk(){
 
   closeBulkModal();
   renderCET();
-  if(added && typeof markScheduleNeedsRegeneration === 'function') markScheduleNeedsRegeneration('CET class changes');
   showToast(`${added} class${added!==1?'es':''} imported.`, 'ok', 3000);
 }
 
@@ -1435,7 +1432,6 @@ function removeCETAssignment(classId, assignmentId){
   if(!cls) return;
   cls.assignments = (cls.assignments || []).filter(a => String(a.id) !== String(assignmentId));
   renderCET();
-  if(typeof markScheduleNeedsRegeneration === 'function') markScheduleNeedsRegeneration('CET tutor changes');
   showToast('CET tutor block removed.', 'ok', 2500);
 }
 
@@ -1445,7 +1441,6 @@ function clearAllCETClasses(){
     cetClasses = [];
     cetFocusedTutorId = null;
     renderCET();
-    if(typeof markScheduleNeedsRegeneration === 'function') markScheduleNeedsRegeneration('CET class changes');
     showToast('All CET classes were removed.', 'ok', 2500);
   }, 'Clear all');
 }
@@ -1464,7 +1459,6 @@ function unassignCET(classId){
   cls.assignments = [];
   cls.assignedTutorId = null;
   renderCET();
-  if(typeof markScheduleNeedsRegeneration === 'function') markScheduleNeedsRegeneration('CET tutor changes');
 }
 
 function saveClassModal(isEdit, editId){
@@ -1503,7 +1497,6 @@ function saveClassModal(isEdit, editId){
 
   closeClassModal();
   renderCET();
-  if(typeof markScheduleNeedsRegeneration === 'function') markScheduleNeedsRegeneration('CET class changes');
   showToast(isEdit ? 'Class updated.' : `"${title}" added.`, 'ok', 2500);
 }
 
@@ -1745,7 +1738,6 @@ function saveClassModal(isEdit, editId){
 
   closeClassModal();
   renderCET();
-  if(typeof markScheduleNeedsRegeneration === 'function') markScheduleNeedsRegeneration('CET class changes');
   showToast(isEdit ? 'Class updated.' : `"${title}" added.`, 'ok', 2500);
 }
 
@@ -2020,7 +2012,6 @@ function saveCETAssignment(classId){
     });
     closeCETAssignModal();
     renderCET();
-    if(typeof markScheduleNeedsRegeneration === 'function') markScheduleNeedsRegeneration('CET tutor changes');
     showToast(`${tutor.name} added to ${cls.title}. ${formatCETHours(totalNeeded)} deducted from CAS hours.${sgPlacement ? ' SG time saved.' : needsSG ? ' SG will be checked during schedule generation.' : ''}`, 'ok', 5500);
   };
 

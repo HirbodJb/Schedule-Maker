@@ -54,7 +54,6 @@ function addTutor(){
 
   tutors.push({id:Date.now(),name,email,phone,eng101,hrs,other,mode,sat,stable,priority,avail:av,assignedHrs:0,assignments:[],manual:true});
   renderTutors();
-  if(typeof markScheduleNeedsRegeneration === 'function') markScheduleNeedsRegeneration('roster changes');
   document.getElementById('t-name').value='';
   document.getElementById('t-email').value='';
   document.getElementById('t-phone').value='';

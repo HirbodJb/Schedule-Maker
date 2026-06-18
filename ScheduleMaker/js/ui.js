@@ -17,20 +17,6 @@ function dismissToast(el){
 }
 
 
-// ── Schedule stale-change warning ─────────────────────────
-let scheduleNeedsRegeneration = false;
-
-function markScheduleNeedsRegeneration(changeLabel='changes'){
-  scheduleNeedsRegeneration = true;
-  const label = String(changeLabel || 'changes');
-  if(typeof showToast === 'function'){
-    showToast(`Schedule may be outdated — regenerate the schedule after ${label}.`, 'warn', 6500);
-  }
-}
-
-function clearScheduleRegenerationWarning(){
-  scheduleNeedsRegeneration = false;
-}
 
 function showConfirm(title, msg, onConfirm, confirmLabel='Delete', confirmClass='btn-danger'){
   const old=document.getElementById('confirm-overlay');

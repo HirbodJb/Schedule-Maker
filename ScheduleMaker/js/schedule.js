@@ -161,7 +161,6 @@ function generateSchedule(){
   showAllGaps = false;
 
   renderOutput(allSlots);
-  if(typeof clearScheduleRegenerationWarning === 'function') clearScheduleRegenerationWarning();
   if(unresolvedSG && unresolvedSG.length){
     showToast(`${unresolvedSG.length} study group${unresolvedSG.length!==1?'s':''} could not be placed automatically. Please assign manually.`, 'warn', 6500);
   }
