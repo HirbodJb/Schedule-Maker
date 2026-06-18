@@ -1354,3 +1354,15 @@ input:focus,select:focus{outline:none;border-color:var(--red);box-shadow:0 0 0 3
 #pane-generate button[onclick="switchPane('tutors')"]{
   display:none !important;
 }
+
+
+/* ── Display-only CET blocks inside schedule grid ───────────── */
+.cet-display-pill{
+  background:#fff3df!important;
+  color:#7a4200!important;
+  border-color:#e0a341!important;
+  cursor:default;
+}
+.cet-display-pill:hover{
+  box-shadow:0 2px 10px rgba(122,66,0,.16);
+}

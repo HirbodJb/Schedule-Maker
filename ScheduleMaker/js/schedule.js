@@ -314,33 +314,131 @@ function showStudyGroupQuickSummary(event, tutorId, day, classId, assignmentId){
 }
 
 
+// ── Display-only CET blocks in the schedule grid ─────────────
+// These are not tutoring-center coverage and do not add hours.
+// They only make CET commitments visible in the schedule view.
+function getCETDisplayBlocksForSlot(day, time){
+  if(typeof cetClasses === 'undefined' || !Array.isArray(cetClasses)) return [];
+  if(typeof normalizeAllCETClasses === 'function') normalizeAllCETClasses();
+
+  const slotStart = timeToMins(time);
+  const slotEnd = slotStart + 30;
+  const out = [];
+
+  cetClasses.forEach(cls => {
+    if(cls.modality === 'async') return; // async coursework has no meeting-time block
+    (cls.assignments || []).forEach(a => {
+      if(!a || !Array.isArray(a.days) || !a.days.includes(day) || !a.startTime || !a.endTime) return;
+
+      const start = timeToMins(a.startTime);
+      const end = timeToMins(a.endTime);
+      if(!(slotStart < end && slotEnd > start)) return;
+
+      const tutor = getTutorById(a.tutorId);
+      if(!tutor) return;
+
+      out.push(Object.assign({}, tutor, {
+        _type: 'cet-display',
+        _cetClassId: cls.id,
+        _cetAssignmentId: a.id,
+        _cetTitle: cls.title || 'CET class',
+        _cetProfessor: cls.professor || 'Prof. TBD',
+        _cetStartTime: a.startTime,
+        _cetEndTime: a.endTime,
+        _cetDays: a.days || []
+      }));
+    });
+  });
+
+  return out;
+}
+
+function showCETQuickSummary(event, tutorId, day, classId, assignmentId){
+  const tutor = getTutorById(tutorId);
+  const cls = (typeof cetClasses !== 'undefined' && Array.isArray(cetClasses))
+    ? cetClasses.find(c => String(c.id) === String(classId))
+    : null;
+  const assignment = cls && Array.isArray(cls.assignments)
+    ? cls.assignments.find(a => String(a.id) === String(assignmentId))
+    : null;
+
+  const card = ensureTutorHoverCard();
+  const title = cls ? (cls.title || 'CET class') : 'CET class';
+  const professor = cls ? (cls.professor || 'Prof. TBD') : 'Prof. TBD';
+  const when = assignment
+    ? `${day} ${fmtTime(assignment.startTime)}–${fmtTime(assignment.endTime)}`
+    : day;
+
+  card.innerHTML = `
+    <div class="tutor-hover-title">CET ${tutor ? escapeHtml(tutor.name) : ''}</div>
+    <div class="tutor-hover-row">
+      <span class="tutor-hover-label">Class</span>
+      <span class="tutor-hover-value">${escapeHtml(title)}</span>
+    </div>
+    <div class="tutor-hover-row">
+      <span class="tutor-hover-label">Professor</span>
+      <span class="tutor-hover-value">${escapeHtml(professor)}</span>
+    </div>
+    <div class="tutor-hover-row">
+      <span class="tutor-hover-label">Time</span>
+      <span class="tutor-hover-value">${escapeHtml(when)}</span>
+    </div>
+  `;
+
+  positionTutorHoverCard(event);
+  requestAnimationFrame(()=>card.classList.add('show'));
+}
+
+
 function renderOutput(slots){
   currentSlots = slots;
   const slotMap={};
   slots.forEach(s=>slotMap[s.day+'-'+s.time]=s);
 
+  const cetDisplayMap = {};
+  ALL_DAYS.forEach(day => {
+    const times = day === 'Friday' ? TIMES_FRI : TIMES_MF;
+    times.forEach(t => {
+      cetDisplayMap[day + '-' + t] = getCETDisplayBlocksForSlot(day, t);
+    });
+  });
+
+  const scheduleRenderTypeKey = (item) => item && item._type ? item._type : 'shift';
+
   // Detect consecutive runs per tutor per day — for merged pill label only (no rowspan)
-  const shiftInfo={}; // "day-time-tutorId" => {isStart, runLen, startTime}
+  const shiftInfo={}; // "day-time-tutorId-type" => {isStart, runLen, startTime}
   ALL_DAYS.forEach(day=>{
     tutors.forEach(tutor=>{
-      let runStart=null, runLen=0;
-      const flush=()=>{
-        if(runLen>0&&runStart!==null){
-          const si=TIMES_MF.indexOf(runStart);
-          for(let i=0;i<runLen;i++){
-            const t=TIMES_MF[si+i];
-            if(t) shiftInfo[day+'-'+t+'-'+tutor.id]={isStart:i===0,runLen,startTime:runStart};
+      ['shift','sg','cet-display'].forEach(typeKey=>{
+        let runStart=null, runLen=0;
+        const flush=()=>{
+          if(runLen>0&&runStart!==null){
+            const si=TIMES_MF.indexOf(runStart);
+            for(let i=0;i<runLen;i++){
+              const t=TIMES_MF[si+i];
+              if(t) shiftInfo[day+'-'+t+'-'+tutor.id+'-'+typeKey]={isStart:i===0,runLen,startTime:runStart,typeKey};
+            }
           }
-        }
-        runStart=null;runLen=0;
-      };
-      TIMES_MF.forEach(t=>{
-        if(day==='Friday'&&!TIMES_FRI.includes(t)){flush();return;}
-        const slot=slotMap[day+'-'+t];
-        if(slot&&slot.assigned.some(a=>String(a.id)===String(tutor.id))){if(!runStart)runStart=t;runLen++;}
-        else flush();
+          runStart=null;runLen=0;
+        };
+
+        TIMES_MF.forEach(t=>{
+          if(day==='Friday'&&!TIMES_FRI.includes(t)){flush();return;}
+          const slot=slotMap[day+'-'+t];
+          const assignedForRuns = [
+            ...(slot && slot.assigned ? slot.assigned : []),
+            ...(cetDisplayMap[day+'-'+t] || [])
+          ];
+          const hasTypeHere = assignedForRuns.some(a =>
+            String(a.id) === String(tutor.id) && scheduleRenderTypeKey(a) === typeKey
+          );
+
+          if(hasTypeHere){if(!runStart)runStart=t;runLen++;}
+          else flush();
+        });
+
+        flush();
       });
-      flush();
     });
   });
 
@@ -379,7 +477,7 @@ function renderOutput(slots){
       if(isFri&&!inFri){html+=`<td style="background:var(--soft);border-right:1px solid var(--line)"></td>`;return;}
 
       const slot=slotMap[day+'-'+t];
-      const assignedHere=slot?slot.assigned:[];
+      const assignedHere=[...(slot && slot.assigned ? slot.assigned : []), ...(cetDisplayMap[day+'-'+t] || [])];
       const movingTutor=moveMode?getTutorById(moveMode.tutorId):null;
       let cellClass='';
       if(moveMode && movingTutor){
@@ -404,10 +502,12 @@ function renderOutput(slots){
       assignedHere.forEach(tt=>{
         const c=colorFor(tutors.findIndex(x=>String(x.id)===String(tt.id)));
         const isSG = tt._type === 'sg';
-        const mode=isSG ? 'SG' : displayModeShortForDay(tt, day);
-        const info=shiftInfo[day+'-'+t+'-'+tt.id];
+        const isCETDisplay = tt._type === 'cet-display';
+        const mode=isSG ? 'SG' : isCETDisplay ? 'CET' : displayModeShortForDay(tt, day);
+        const renderType = scheduleRenderTypeKey(tt);
+        const info=shiftInfo[day+'-'+t+'-'+tt.id+'-'+renderType];
         const isMerged=info&&info.runLen>1;
-        const pillClass=(isMerged?'pill-merged':'pill') + (isSG ? ' sg-pill' : '');
+        const pillClass=(isMerged?'pill-merged':'pill') + (isSG ? ' sg-pill' : '') + (isCETDisplay ? ' cet-display-pill' : '');
 
         let timeLabel='';
         if(isMerged&&info.isStart){
@@ -417,14 +517,34 @@ function renderOutput(slots){
           // continuation row — show a faint continuation indicator, not a full pill
           const editClass=moveMode&&String(moveMode.tutorId)===String(tt.id)&&moveMode.day===day&&moveMode.time===t?' move-source':'';
           const focusClass=focusedTutorId?(String(focusedTutorId)===String(tt.id)?' focus-match':' focus-nonmatch'):'';
-          pills+=`<span class="pill${isSG?' sg-pill':''}${editClass}${focusClass}" onmouseenter="${isSG ? `showStudyGroupQuickSummary(event,${tt.id},'${day}',${tt._sgClassId},${tt._sgAssignmentId})` : `showTutorQuickSummary(event,${tt.id},'${day}')`}" onmousemove="moveTutorQuickSummary(event)" onmouseleave="hideTutorQuickSummary()" onclick="openShiftPopover(event,${tt.id},'${day}','${t}')" style="background:${isSG?'#eaf3de':c.bg};color:${isSG?'#27500a':c.text};border:1px dashed ${isSG?'#8bc46b':c.border};opacity:.72;font-size:9px;">${isSG?'SG ':''}${tt.name.split(' ')[0]} ···</span>`;
+          const hoverHandler = isSG
+            ? `showStudyGroupQuickSummary(event,${tt.id},'${day}',${tt._sgClassId},${tt._sgAssignmentId})`
+            : isCETDisplay
+              ? `showCETQuickSummary(event,${tt.id},'${day}',${tt._cetClassId},${tt._cetAssignmentId})`
+              : `showTutorQuickSummary(event,${tt.id},'${day}')`;
+          const clickHandler = isCETDisplay
+            ? `event.stopPropagation()`
+            : `openShiftPopover(event,${tt.id},'${day}','${t}')`;
+          pills+=`<span class="pill${isSG?' sg-pill':''}${isCETDisplay?' cet-display-pill':''}${editClass}${focusClass}" onmouseenter="${hoverHandler}" onmousemove="moveTutorQuickSummary(event)" onmouseleave="hideTutorQuickSummary()" onclick="${clickHandler}" style="background:${isSG?'#eaf3de':isCETDisplay?'#fff3df':c.bg};color:${isSG?'#27500a':isCETDisplay?'#7a4200':c.text};border:1px dashed ${isSG?'#8bc46b':isCETDisplay?'#e0a341':c.border};opacity:.78;font-size:9px;">${isSG?'SG ':isCETDisplay?'CET ':''}${tt.name.split(' ')[0]} ···</span>`;
           return;
         }
 
         const editClass=moveMode&&String(moveMode.tutorId)===String(tt.id)&&moveMode.day===day&&moveMode.time===t?' move-source':'';
         const focusClass=focusedTutorId?(String(focusedTutorId)===String(tt.id)?' focus-match':' focus-nonmatch'):'';
-        const labelText = isSG ? `SG ${tt.name.split(' ')[0]}` : `${tt.name.split(' ')[0]} ${mode}`;
-        pills+=`<span class="${pillClass}${editClass}${focusClass}" onmouseenter="${isSG ? `showStudyGroupQuickSummary(event,${tt.id},'${day}',${tt._sgClassId},${tt._sgAssignmentId})` : `showTutorQuickSummary(event,${tt.id},'${day}')`}" onmousemove="moveTutorQuickSummary(event)" onmouseleave="hideTutorQuickSummary()" onclick="openShiftPopover(event,${tt.id},'${day}','${t}')" style="background:${isSG?'#eaf3de':c.bg};color:${isSG?'#27500a':c.text};border:1.5px solid ${isSG?'#8bc46b':c.border}">${labelText}${timeLabel}</span>`;
+        const labelText = isSG
+          ? `SG ${tt.name.split(' ')[0]}`
+          : isCETDisplay
+            ? `${tt.name.split(' ')[0]} CET ${tt._cetTitle ? '“' + tt._cetTitle + '”' : ''}`
+            : `${tt.name.split(' ')[0]} ${mode}`;
+        const hoverHandler = isSG
+          ? `showStudyGroupQuickSummary(event,${tt.id},'${day}',${tt._sgClassId},${tt._sgAssignmentId})`
+          : isCETDisplay
+            ? `showCETQuickSummary(event,${tt.id},'${day}',${tt._cetClassId},${tt._cetAssignmentId})`
+            : `showTutorQuickSummary(event,${tt.id},'${day}')`;
+        const clickHandler = isCETDisplay
+          ? `event.stopPropagation()`
+          : `openShiftPopover(event,${tt.id},'${day}','${t}')`;
+        pills+=`<span class="${pillClass}${editClass}${focusClass}" onmouseenter="${hoverHandler}" onmousemove="moveTutorQuickSummary(event)" onmouseleave="hideTutorQuickSummary()" onclick="${clickHandler}" style="background:${isSG?'#eaf3de':isCETDisplay?'#fff3df':c.bg};color:${isSG?'#27500a':isCETDisplay?'#7a4200':c.text};border:1.5px solid ${isSG?'#8bc46b':isCETDisplay?'#e0a341':c.border}">${labelText}${timeLabel}</span>`;
       });
 
       html+=`<td class="${cellClass}" onclick="handleScheduleCellClickGuarded('${day}','${t}')">${pills}</td>`;
