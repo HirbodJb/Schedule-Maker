@@ -569,7 +569,7 @@ function _openClassModal(editId, data){
         <div class="fg">
           <span class="fl">Total hrs/wk for CET</span>
           <input id="cm-hrs" type="number" min="1" max="20" step="0.5"
-            placeholder="e.g. 2 if no SG, 3 if 2h class + 1h SG"
+            placeholder="e.g. 2 if no SG, 3 if 2h class + 1h study group"
             value="${data.hrsPerWeek||''}">
         </div>
         <div class="fg">
@@ -1644,7 +1644,7 @@ function _openClassModal(editId, data){
       <div class="form-grid two" style="margin-top:12px">
         <div class="fg">
           <span class="fl">Total hrs/wk for CET</span>
-          <input id="cm-hrs" type="number" min="1" max="20" step="0.5" placeholder="e.g. 2 if no SG, 3 if 2h class + 1h SG" value="${data.hrsPerWeek||''}">
+          <input id="cm-hrs" type="number" min="1" max="20" step="0.5" placeholder="e.g. 2 if no SG, 3 if 2h class + 1h study group" value="${data.hrsPerWeek||''}">
         </div>
         <div class="fg">
           <span class="fl">Study group</span>
@@ -1905,7 +1905,7 @@ function updateCETAssignPreview(classId){
   if(isAsync){
     const total = Number(draft.weeklyHours || 0) + (needsSG && draft.sgDay && draft.sgStart ? 1 : 0);
     preview.textContent = needsSG
-      ? (draft.sgDay && draft.sgStart ? `${formatCETHours(total)} / week (${formatCETHours(draft.weeklyHours)} coursework + 1h SG)` : `${formatCETHours(draft.weeklyHours)} coursework + choose 1h SG`)
+      ? (draft.sgDay && draft.sgStart ? `${formatCETHours(total)} / week (${formatCETHours(draft.weeklyHours)} coursework + 1h study group)` : `${formatCETHours(draft.weeklyHours)} coursework + choose 1h study group`)
       : `${formatCETHours(draft.weeklyHours)} / week`;
   } else {
     preview.textContent = draft.weeklyHours > 0 ? `${formatCETHours(draft.weeklyHours)} / week` : 'Select days and valid times';

@@ -1348,3 +1348,9 @@ input:focus,select:focus{outline:none;border-color:var(--red);box-shadow:0 0 0 3
   padding-left:18px;
   line-height:1.55;
 }
+
+
+/* Hide redundant Schedule page Back to roster button */
+#pane-generate button[onclick="switchPane('tutors')"]{
+  display:none !important;
+}

@@ -16,14 +16,16 @@ function isStudyGroupBlockValid(tutor, day, startTime, slots){
       && !scheduleSlotHasTutor(slot, tutor.id);
   });
 }
-function placeStudyGroupBlock(tutor, cls, assignment, day, startTime, slots){
+function placeStudyGroupBlock(tutor, cls, assignment, day, startTime, slots, options={}){
   const startMins = timeToMins(startTime);
   const blockTimes = [startTime, minsToScheduleTime(startMins + 30)];
   const sgTutor = Object.assign({}, tutor, {
     _type:'sg',
     _sgClassId: cls.id,
     _sgAssignmentId: assignment.id,
-    _sgTitle: cls.title || 'Study group'
+    _sgTitle: cls.title || 'Study group',
+    _sgProfessor: cls.professor || 'Prof. TBD',
+    _sgManual: !!options.manual
   });
   blockTimes.forEach(t => {
     const slot = scheduleFindSlot(slots, day, t);
@@ -34,9 +36,12 @@ function placeStudyGroupBlock(tutor, cls, assignment, day, startTime, slots){
     day,
     startTime,
     endTime: minsToScheduleTime(startMins + 60),
-    weeklyHours: 1
+    weeklyHours: 1,
+    manual: !!options.manual
   };
-  assignment.sgNote = 'Study group auto-placed next to class time.';
+  assignment.sgNote = options.manual
+    ? 'Study group manually selected for this asynchronous class.'
+    : 'Study group auto-placed next to class time.';
   tutor.assignedHrs = Number(tutor.assignedHrs || 0) + 1;
 }
 function autoPlaceCETStudyGroups(slots){
@@ -54,6 +59,24 @@ function autoPlaceCETStudyGroups(slots){
         unresolved.push({cls, assignment:a});
         return;
       }
+
+      // Async classes have no class meeting time, so they never use before/after auto-SG.
+      // They use the manual SG day/time selected in the CET assignment modal.
+      if(cls.modality === 'async'){
+        const p = a.sgPlacement;
+        if(p && p.day && p.startTime && isStudyGroupBlockValid(tutor, p.day, p.startTime, slots)){
+          placeStudyGroupBlock(tutor, cls, a, p.day, p.startTime, slots, {manual:true});
+        } else {
+          a.sgStatus = 'manual-needed';
+          a.sgPlacement = p || null;
+          a.sgNote = p
+            ? 'The selected async SG time is no longer available. Please choose a different SG time.'
+            : 'Asynchronous class: choose a manual SG time in the CET assignment.';
+          unresolved.push({cls, assignment:a});
+        }
+        return;
+      }
+
       a.sgStatus = 'pending';
       a.sgPlacement = null;
       a.sgNote = '';
@@ -255,6 +278,42 @@ function hideTutorQuickSummary(){
 }
 
 
+function showStudyGroupQuickSummary(event, tutorId, day, classId, assignmentId){
+  const tutor = getTutorById(tutorId);
+  const cls = (typeof cetClasses !== 'undefined' && Array.isArray(cetClasses))
+    ? cetClasses.find(c => String(c.id) === String(classId))
+    : null;
+  const card = ensureTutorHoverCard();
+  const title = cls ? (cls.title || 'Study group') : 'Study group';
+  const professor = cls ? (cls.professor || 'Prof. TBD') : 'Prof. TBD';
+  const assignment = cls && Array.isArray(cls.assignments)
+    ? cls.assignments.find(a => String(a.id) === String(assignmentId))
+    : null;
+  const when = assignment && assignment.sgPlacement
+    ? `${assignment.sgPlacement.day} ${fmtTime(assignment.sgPlacement.startTime)}–${fmtTime(assignment.sgPlacement.endTime)}`
+    : day || '';
+
+  card.innerHTML = `
+    <div class="tutor-hover-title">SG ${tutor ? escapeHtml(tutor.name) : ''}</div>
+    <div class="tutor-hover-row">
+      <span class="tutor-hover-label">Class</span>
+      <span class="tutor-hover-value">${escapeHtml(title)}</span>
+    </div>
+    <div class="tutor-hover-row">
+      <span class="tutor-hover-label">Professor</span>
+      <span class="tutor-hover-value">${escapeHtml(professor)}</span>
+    </div>
+    <div class="tutor-hover-row">
+      <span class="tutor-hover-label">Time</span>
+      <span class="tutor-hover-value">${escapeHtml(when)}</span>
+    </div>
+  `;
+
+  positionTutorHoverCard(event);
+  requestAnimationFrame(()=>card.classList.add('show'));
+}
+
+
 function renderOutput(slots){
   currentSlots = slots;
   const slotMap={};
@@ -358,14 +417,14 @@ function renderOutput(slots){
           // continuation row — show a faint continuation indicator, not a full pill
           const editClass=moveMode&&String(moveMode.tutorId)===String(tt.id)&&moveMode.day===day&&moveMode.time===t?' move-source':'';
           const focusClass=focusedTutorId?(String(focusedTutorId)===String(tt.id)?' focus-match':' focus-nonmatch'):'';
-          pills+=`<span class="pill${isSG?' sg-pill':''}${editClass}${focusClass}" onmouseenter="showTutorQuickSummary(event,${tt.id},'${day}')" onmousemove="moveTutorQuickSummary(event)" onmouseleave="hideTutorQuickSummary()" onclick="openShiftPopover(event,${tt.id},'${day}','${t}')" style="background:${isSG?'#eaf3de':c.bg};color:${isSG?'#27500a':c.text};border:1px dashed ${isSG?'#8bc46b':c.border};opacity:.72;font-size:9px;">${isSG?'SG ':''}${tt.name.split(' ')[0]} ···</span>`;
+          pills+=`<span class="pill${isSG?' sg-pill':''}${editClass}${focusClass}" onmouseenter="${isSG ? `showStudyGroupQuickSummary(event,${tt.id},'${day}',${tt._sgClassId},${tt._sgAssignmentId})` : `showTutorQuickSummary(event,${tt.id},'${day}')`}" onmousemove="moveTutorQuickSummary(event)" onmouseleave="hideTutorQuickSummary()" onclick="openShiftPopover(event,${tt.id},'${day}','${t}')" style="background:${isSG?'#eaf3de':c.bg};color:${isSG?'#27500a':c.text};border:1px dashed ${isSG?'#8bc46b':c.border};opacity:.72;font-size:9px;">${isSG?'SG ':''}${tt.name.split(' ')[0]} ···</span>`;
           return;
         }
 
         const editClass=moveMode&&String(moveMode.tutorId)===String(tt.id)&&moveMode.day===day&&moveMode.time===t?' move-source':'';
         const focusClass=focusedTutorId?(String(focusedTutorId)===String(tt.id)?' focus-match':' focus-nonmatch'):'';
         const labelText = isSG ? `SG ${tt.name.split(' ')[0]}` : `${tt.name.split(' ')[0]} ${mode}`;
-        pills+=`<span class="${pillClass}${editClass}${focusClass}" onmouseenter="showTutorQuickSummary(event,${tt.id},'${day}')" onmousemove="moveTutorQuickSummary(event)" onmouseleave="hideTutorQuickSummary()" onclick="openShiftPopover(event,${tt.id},'${day}','${t}')" style="background:${isSG?'#eaf3de':c.bg};color:${isSG?'#27500a':c.text};border:1.5px solid ${isSG?'#8bc46b':c.border}">${labelText}${timeLabel}</span>`;
+        pills+=`<span class="${pillClass}${editClass}${focusClass}" onmouseenter="${isSG ? `showStudyGroupQuickSummary(event,${tt.id},'${day}',${tt._sgClassId},${tt._sgAssignmentId})` : `showTutorQuickSummary(event,${tt.id},'${day}')`}" onmousemove="moveTutorQuickSummary(event)" onmouseleave="hideTutorQuickSummary()" onclick="openShiftPopover(event,${tt.id},'${day}','${t}')" style="background:${isSG?'#eaf3de':c.bg};color:${isSG?'#27500a':c.text};border:1.5px solid ${isSG?'#8bc46b':c.border}">${labelText}${timeLabel}</span>`;
       });
 
       html+=`<td class="${cellClass}" onclick="handleScheduleCellClickGuarded('${day}','${t}')">${pills}</td>`;
@@ -763,5 +822,147 @@ function autoPlaceCETStudyGroups(slots){
       }
     });
   });
+  return unresolved;
+}
+
+
+// ══════════════════════════════════════════════════════════════
+//  Final fix: async manual SG placement should not block itself
+// ══════════════════════════════════════════════════════════════
+function isTutorBusyWithCETExcept(tutorOrId, day, time, exceptClassId=null, exceptAssignmentId=null){
+  const tutorId = typeof tutorOrId === 'object' ? tutorOrId.id : tutorOrId;
+  const slotStart = timeToMins(time);
+  const slotEnd = slotStart + 30;
+
+  if(typeof getCETAssignmentsForTutor !== 'function') return false;
+
+  return getCETAssignmentsForTutor(tutorId).some(({cls, assignment:a}) => {
+    const sameAssignment = String(cls.id) === String(exceptClassId) && String(a.id) === String(exceptAssignmentId);
+
+    const overlaps = (startTime, endTime, days) => {
+      if(!days || !days.includes(day) || !startTime || !endTime) return false;
+      const aStart = timeToMins(startTime);
+      const aEnd = timeToMins(endTime);
+      return slotStart < aEnd && slotEnd > aStart;
+    };
+
+    // Never ignore the actual class/CET time block.
+    if(overlaps(a.startTime, a.endTime, a.days)) return true;
+
+    // Ignore only this exact assignment's own SG placement while we are validating
+    // or placing that same SG. This fixes async SG showing as "placed" in CET
+    // but not rendering in the schedule because the checker saw its own saved
+    // sgPlacement as a conflict.
+    if(sameAssignment) return false;
+
+    if(a.sgPlacement && overlaps(a.sgPlacement.startTime, a.sgPlacement.endTime, [a.sgPlacement.day])) return true;
+    return false;
+  });
+}
+
+function isStudyGroupBlockValid(tutor, day, startTime, slots, cls=null, assignment=null){
+  const times = timesForDay(day);
+  const startMins = timeToMins(startTime);
+  const blockTimes = [startTime, minsToScheduleTime(startMins + 30)];
+  if(!blockTimes.every(t => times.includes(t))) return false;
+
+  return blockTimes.every(t => {
+    const key = scheduleSlotKey(day, t);
+    const slot = scheduleFindSlot(slots, day, t);
+    return tutor.avail && tutor.avail[key] === true
+      && !isTutorBusyWithCETExcept(tutor, day, t, cls && cls.id, assignment && assignment.id)
+      && !scheduleSlotHasTutor(slot, tutor.id);
+  });
+}
+
+function placeStudyGroupBlock(tutor, cls, assignment, day, startTime, slots, isManual=false){
+  const startMins = timeToMins(startTime);
+  const blockTimes = [startTime, minsToScheduleTime(startMins + 30)];
+  const sgTutor = Object.assign({}, tutor, {
+    _type:'sg',
+    _sgClassId: cls.id,
+    _sgAssignmentId: assignment.id,
+    _sgTitle: cls.title || 'Study group',
+    _sgProfessor: cls.professor || 'Prof. TBD',
+    _sgManual: !!isManual
+  });
+
+  blockTimes.forEach(t => {
+    const slot = scheduleFindSlot(slots, day, t);
+    if(slot && !scheduleSlotHasTutor(slot, tutor.id)) slot.assigned.push(sgTutor);
+  });
+
+  assignment.sgStatus = 'scheduled';
+  assignment.sgPlacement = {
+    day,
+    startTime,
+    endTime: minsToScheduleTime(startMins + 60),
+    weeklyHours: 1,
+    manual: !!isManual
+  };
+  assignment.sgNote = isManual ? 'Study group manually selected for this asynchronous class.' : 'Study group auto-placed next to class time.';
+  tutor.assignedHrs = Number(tutor.assignedHrs || 0) + 1;
+}
+
+function autoPlaceCETStudyGroups(slots){
+  if(typeof normalizeAllCETClasses !== 'function') return [];
+  normalizeAllCETClasses();
+  const unresolved = [];
+
+  cetClasses.forEach(cls => {
+    (cls.assignments || []).forEach(a => {
+      if(!(typeof assignmentNeedsStudyGroup === 'function' && assignmentNeedsStudyGroup(cls, a))) return;
+
+      const tutor = getTutorById(a.tutorId);
+      if(!tutor){
+        a.sgStatus = 'manual-needed';
+        a.sgPlacement = null;
+        a.sgNote = 'Tutor was not found in the roster.';
+        unresolved.push({cls, assignment:a});
+        return;
+      }
+
+      if(cls.modality === 'async'){
+        if(a.sgPlacement && a.sgPlacement.day && a.sgPlacement.startTime){
+          if(isStudyGroupBlockValid(tutor, a.sgPlacement.day, a.sgPlacement.startTime, slots, cls, a)){
+            placeStudyGroupBlock(tutor, cls, a, a.sgPlacement.day, a.sgPlacement.startTime, slots, true);
+          } else {
+            a.sgStatus = 'manual-needed';
+            a.sgNote = 'The selected asynchronous SG time is no longer valid because it is outside CAS hours, overlaps another block, or the tutor is unavailable.';
+            unresolved.push({cls, assignment:a});
+          }
+        } else {
+          a.sgStatus = 'manual-needed';
+          a.sgPlacement = null;
+          a.sgNote = 'Asynchronous class: study group must be manually selected in the CET tutor block.';
+          unresolved.push({cls, assignment:a});
+        }
+        return;
+      }
+
+      a.sgStatus = 'pending';
+      a.sgPlacement = null;
+      a.sgNote = '';
+
+      const candidates = [];
+      (a.days || []).forEach(day => {
+        const after = a.endTime;
+        const before = minsToScheduleTime(timeToMins(a.startTime) - 60);
+        candidates.push({day, startTime: after, priority: 'after'});
+        candidates.push({day, startTime: before, priority: 'before'});
+      });
+
+      const chosen = candidates.find(c => isStudyGroupBlockValid(tutor, c.day, c.startTime, slots, cls, a));
+      if(chosen){
+        placeStudyGroupBlock(tutor, cls, a, chosen.day, chosen.startTime, slots, false);
+      } else {
+        a.sgStatus = 'manual-needed';
+        a.sgPlacement = null;
+        a.sgNote = 'No available 1-hour study group block immediately before or after the CET class time. Please assign study group manually.';
+        unresolved.push({cls, assignment:a});
+      }
+    });
+  });
+
   return unresolved;
 }
