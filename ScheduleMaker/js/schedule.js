@@ -657,3 +657,111 @@ function handleScheduleCellClickGuarded(day, time){
     handleScheduleCellClick(day, time);
   }
 }
+
+
+// ══════════════════════════════════════════════════════════════
+//  Async CET SG scheduling override
+//  Async classes do not use before/after class SG logic; their SG must be
+//  manually selected on the CET assignment and then placed into the schedule.
+// ══════════════════════════════════════════════════════════════
+
+function isStudyGroupBlockValid(tutor, day, startTime, slots){
+  const times = timesForDay(day);
+  const startMins = timeToMins(startTime);
+  const blockTimes = [startTime, minsToScheduleTime(startMins + 30)];
+  if(!blockTimes.every(t => times.includes(t))) return false;
+  return blockTimes.every(t => {
+    const key = scheduleSlotKey(day, t);
+    const slot = scheduleFindSlot(slots, day, t);
+    return tutor.avail && tutor.avail[key] === true
+      && !(typeof isTutorBusyWithCET === 'function' && isTutorBusyWithCET(tutor, day, t))
+      && !scheduleSlotHasTutor(slot, tutor.id);
+  });
+}
+
+function placeStudyGroupBlock(tutor, cls, assignment, day, startTime, slots, isManual=false){
+  const startMins = timeToMins(startTime);
+  const blockTimes = [startTime, minsToScheduleTime(startMins + 30)];
+  const sgTutor = Object.assign({}, tutor, {
+    _type:'sg',
+    _sgClassId: cls.id,
+    _sgAssignmentId: assignment.id,
+    _sgTitle: cls.title || 'Study group'
+  });
+  blockTimes.forEach(t => {
+    const slot = scheduleFindSlot(slots, day, t);
+    if(slot && !scheduleSlotHasTutor(slot, tutor.id)) slot.assigned.push(sgTutor);
+  });
+  assignment.sgStatus = 'scheduled';
+  assignment.sgPlacement = {
+    day,
+    startTime,
+    endTime: minsToScheduleTime(startMins + 60),
+    weeklyHours: 1,
+    manual: !!isManual
+  };
+  assignment.sgNote = isManual ? 'Study group manually selected for this asynchronous class.' : 'Study group auto-placed next to class time.';
+  tutor.assignedHrs = Number(tutor.assignedHrs || 0) + 1;
+}
+
+function autoPlaceCETStudyGroups(slots){
+  if(typeof normalizeAllCETClasses !== 'function') return [];
+  normalizeAllCETClasses();
+  const unresolved = [];
+
+  cetClasses.forEach(cls => {
+    (cls.assignments || []).forEach(a => {
+      if(!(typeof assignmentNeedsStudyGroup === 'function' && assignmentNeedsStudyGroup(cls, a))) return;
+      const tutor = getTutorById(a.tutorId);
+      if(!tutor){
+        a.sgStatus = 'manual-needed';
+        a.sgPlacement = null;
+        a.sgNote = 'Tutor was not found in the roster.';
+        unresolved.push({cls, assignment:a});
+        return;
+      }
+
+      if(cls.modality === 'async'){
+        // Async SG must already be manually selected in the CET assignment.
+        if(a.sgPlacement && a.sgPlacement.day && a.sgPlacement.startTime){
+          if(isStudyGroupBlockValid(tutor, a.sgPlacement.day, a.sgPlacement.startTime, slots)){
+            placeStudyGroupBlock(tutor, cls, a, a.sgPlacement.day, a.sgPlacement.startTime, slots, true);
+          } else {
+            a.sgStatus = 'manual-needed';
+            a.sgNote = 'The selected asynchronous SG time is no longer valid because it is outside CAS hours, overlaps another block, or the tutor is unavailable.';
+            unresolved.push({cls, assignment:a});
+          }
+        } else {
+          a.sgStatus = 'manual-needed';
+          a.sgPlacement = null;
+          a.sgNote = 'Asynchronous class: SG must be manually selected in the CET tutor block.';
+          unresolved.push({cls, assignment:a});
+        }
+        return;
+      }
+
+      a.sgStatus = 'pending';
+      a.sgPlacement = null;
+      a.sgNote = '';
+
+      const candidates = [];
+      (a.days || []).forEach(day => {
+        const after = a.endTime;
+        const before = minsToScheduleTime(timeToMins(a.startTime) - 60);
+        candidates.push({day, startTime: after, priority: 'after'});
+        candidates.push({day, startTime: before, priority: 'before'});
+      });
+
+      const chosen = candidates.find(c => isStudyGroupBlockValid(tutor, c.day, c.startTime, slots));
+      if(chosen){
+        placeStudyGroupBlock(tutor, cls, a, chosen.day, chosen.startTime, slots, false);
+      } else {
+        a.sgStatus = 'manual-needed';
+        a.sgPlacement = null;
+        a.sgNote = 'No available 1-hour SG block immediately before or after the CET class time. Please assign SG manually.';
+        unresolved.push({cls, assignment:a});
+      }
+    });
+  });
+  return unresolved;
+}

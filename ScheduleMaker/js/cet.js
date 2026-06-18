@@ -1529,3 +1529,513 @@ function importCETState(data){
     cetClasses = data.cetClasses.map(normalizeCETClass);
   }
 }
+
+
+// ══════════════════════════════════════════════════════════════
+//  Async CET + manual SG overrides
+//  - Modality appears before days/times in class modal
+//  - Async classes hide class day/time inputs
+//  - Async tutor assignment uses manual SG day/time instead of class meeting time
+// ══════════════════════════════════════════════════════════════
+
+function isAsyncCETClass(cls){
+  return !!(cls && cls.modality === 'async');
+}
+
+function cetOperatingTimesForDay(day){
+  return typeof timesForDay === 'function' ? timesForDay(day) : (day === 'Friday' ? TIMES_FRI : TIMES_MF);
+}
+
+function isOneHourBlockInsideCAS(day, startTime){
+  if(!day || !startTime) return false;
+  const times = cetOperatingTimesForDay(day);
+  const start = timeToMins(startTime);
+  const second = minsToScheduleTime(start + 30);
+  return times.includes(startTime) && times.includes(second);
+}
+
+function tutorAvailableForOneHourBlock(tutor, day, startTime){
+  if(!tutor || !day || !startTime) return false;
+  const start = timeToMins(startTime);
+  const blockTimes = [startTime, minsToScheduleTime(start + 30)];
+  return blockTimes.every(t => tutor.avail && tutor.avail[slotKeyFor(day, timeToMins(t))] === true);
+}
+
+function oneHourEndTime(startTime){
+  return minsToScheduleTime(timeToMins(startTime) + 60);
+}
+
+function resetClassModalScheduleVisibility(){
+  const modality = document.getElementById('cm-modality')?.value || 'in-person';
+  const isAsync = modality === 'async';
+  const classSchedule = document.getElementById('cm-class-schedule-fields');
+  if(classSchedule) classSchedule.style.display = isAsync ? 'none' : '';
+
+  if(isAsync){
+    document.querySelectorAll('input[name="cm-days"]').forEach(cb => cb.checked = false);
+    const start = document.getElementById('cm-start');
+    const end = document.getElementById('cm-end');
+    if(start) start.value = '';
+    if(end) end.value = '';
+    ['cm-start','cm-end'].forEach(id=>{
+      const h=document.getElementById(`${id}-hour`), m=document.getElementById(`${id}-minute`), ap=document.getElementById(`${id}-ampm`);
+      if(h) h.value=''; if(m) m.value=''; if(ap) ap.value='AM';
+    });
+  }
+}
+
+function _openClassModal(editId, data){
+  const old = document.getElementById('cet-modal-overlay');
+  if(old) old.remove();
+
+  const isEdit = editId !== null;
+  const days = data.days || [];
+  const modality = data.modality || 'in-person';
+
+  const ov = document.createElement('div');
+  ov.id = 'cet-modal-overlay';
+  ov.className = 'cet-modal-overlay';
+
+  ov.innerHTML = `
+  <div class="cet-modal" role="dialog" aria-modal="true" aria-label="${isEdit?'Edit':'Add'} ESL class">
+    <div class="cet-modal-header">
+      <h3>${isEdit ? 'Edit class' : 'Add ESL class'}</h3>
+      <button class="cet-modal-close" onclick="closeClassModal()" aria-label="Close">&times;</button>
+    </div>
+    <div class="cet-modal-body">
+      <div class="form-grid two">
+        <div class="fg">
+          <span class="fl">Course title</span>
+          <input id="cm-title" placeholder="e.g. ESL 4B" value="${cetEsc(data.title||data.courseCode||'')}">
+        </div>
+      </div>
+
+      <div class="form-grid two" style="margin-top:10px">
+        <div class="fg"><span class="fl">Professor</span><input id="cm-prof" placeholder="e.g. Prof. Martinez" value="${cetEsc(data.professor||'')}"></div>
+        <div class="fg"><span class="fl">Semester</span><input id="cm-semester" placeholder="e.g. Fall 2026" value="${cetEsc(data.semester||'')}"></div>
+      </div>
+
+      <div class="form-grid" style="margin-top:12px;grid-template-columns:1fr 1fr 1fr">
+        <div class="fg">
+          <span class="fl">Modality</span>
+          <select id="cm-modality" onchange="resetClassModalScheduleVisibility()">
+            <option value="in-person" ${modality==='in-person'?'selected':''}>In-person</option>
+            <option value="online-live" ${modality==='online-live'?'selected':''}>Online – live Zoom</option>
+            <option value="async" ${modality==='async'?'selected':''}>Asynchronous</option>
+          </select>
+        </div>
+      </div>
+
+      <div id="cm-class-schedule-fields">
+        <div style="margin-top:12px">
+          <span class="fl" style="display:block;margin-bottom:6px">Class days</span>
+          <div class="cet-day-checkboxes">
+            ${['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'].map(d=>`
+              <label class="cet-day-label"><input type="checkbox" name="cm-days" value="${d}" ${days.includes(d)?'checked':''}> ${d.slice(0,3)}</label>`).join('')}
+          </div>
+        </div>
+
+        <div class="form-grid two" style="margin-top:12px">
+          <div class="fg"><span class="fl">Start time</span>${cetTimePickerHTML('cm-start', data.startTime||'')}</div>
+          <div class="fg"><span class="fl">End time</span>${cetTimePickerHTML('cm-end', data.endTime||'')}</div>
+        </div>
+      </div>
+
+      <div class="form-grid two" style="margin-top:12px">
+        <div class="fg">
+          <span class="fl">Total hrs/wk for CET</span>
+          <input id="cm-hrs" type="number" min="1" max="20" step="0.5" placeholder="e.g. 2 if no SG, 3 if 2h class + 1h SG" value="${data.hrsPerWeek||''}">
+        </div>
+        <div class="fg">
+          <span class="fl">Study group</span>
+          <label class="cet-study-toggle">
+            <input type="checkbox" id="cm-requires-sg" ${(data.requiresStudyGroup===false)?'':'checked'} onchange="toggleStudyGroupModeVisibility()">
+            <span>This class needs 1-hour study group</span>
+          </label>
+          <select id="cm-sg-mode" style="margin-top:8px">
+            <option value="in-person" ${(data.studyGroupMode||'in-person')==='in-person'?'selected':''}>In-person at CAS</option>
+            <option value="online" ${(data.studyGroupMode||'')==='online'?'selected':''}>Online</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="cet-study-note">
+        If study group is checked, the total CET hours should include that extra 1 hour. For asynchronous classes, Jamie chooses the SG time when adding the tutor block.
+      </div>
+
+      <div style="margin-top:12px;background:var(--warn-bg);border:1px solid var(--warn-b);border-radius:11px;padding:12px 14px">
+        <span class="fl" style="display:block;margin-bottom:6px">Does this class want a CET?</span>
+        <div style="display:flex;gap:12px">
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:700;cursor:pointer"><input type="radio" name="cm-wants" value="yes" ${(data.wantsCET===false)?'':'checked'}> Yes</label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:700;cursor:pointer"><input type="radio" name="cm-wants" value="no" ${(data.wantsCET===false)?'checked':''}> No</label>
+        </div>
+      </div>
+    </div>
+    <div class="cet-modal-footer">
+      <button class="btn" onclick="closeClassModal()">Cancel</button>
+      <button class="btn btn-red" onclick="saveClassModal(${JSON.stringify(isEdit)}, ${editId||'null'})"><i class="ti ti-check"></i> ${isEdit ? 'Save changes' : 'Add class'}</button>
+    </div>
+  </div>`;
+
+  document.body.appendChild(ov);
+  ov.addEventListener('click', e => { if(e.target === ov) closeClassModal(); });
+  toggleStudyGroupModeVisibility();
+  resetClassModalScheduleVisibility();
+  document.getElementById('cm-title').focus();
+}
+
+function saveClassModal(isEdit, editId){
+  cetSyncAllTimePickers();
+  const title     = document.getElementById('cm-title').value.trim();
+  const professor = document.getElementById('cm-prof').value.trim();
+  const semester  = document.getElementById('cm-semester').value.trim();
+  const modality  = document.getElementById('cm-modality').value;
+  const isAsync   = modality === 'async';
+  const days      = isAsync ? [] : [...document.querySelectorAll('input[name="cm-days"]:checked')].map(el=>el.value);
+  const startTime = isAsync ? '' : document.getElementById('cm-start').value;
+  const endTime   = isAsync ? '' : document.getElementById('cm-end').value;
+  const hrsPerWeek= parseFloat(document.getElementById('cm-hrs').value)||0;
+  const requiresSG = document.getElementById('cm-requires-sg')?.checked !== false;
+  const sgMode    = requiresSG ? document.getElementById('cm-sg-mode').value : 'none';
+  const wantsCET  = document.querySelector('input[name="cm-wants"]:checked')?.value !== 'no';
+
+  if(!title){ showToast('Please enter the course title.','warn'); return; }
+  if(wantsCET && hrsPerWeek <= 0){ showToast('Enter the total CET hours per week. Include study group only if this class needs one.','warn'); return; }
+  if(!isAsync && wantsCET && (!days.length || !startTime || !endTime || timeToMins(endTime) <= timeToMins(startTime))){
+    showToast('For live/in-person classes, select class days and a valid class start/end time.', 'warn');
+    return;
+  }
+
+  const existing = isEdit ? cetClasses.find(c=>String(c.id)===String(editId)) : null;
+  const obj = {
+    id: isEdit ? editId : Date.now(),
+    title, professor, semester, days, startTime, endTime, modality,
+    hrsPerWeek, studyGroupMode: sgMode, requiresStudyGroup: requiresSG,
+    wantsCET,
+    assignedTutorId: null,
+    assignments: existing && Array.isArray(existing.assignments) ? existing.assignments : []
+  };
+
+  if(isAsync){
+    obj.assignments = obj.assignments.map(a => ({
+      ...a,
+      days: [],
+      startTime: '',
+      endTime: '',
+      weeklyHours: Math.max(0, Number(hrsPerWeek||0) - (requiresSG ? 1 : 0)),
+      asyncCoursework: true,
+      sgStatus: requiresSG ? (a.sgPlacement ? 'scheduled' : 'manual-needed') : 'not-needed',
+      sgNote: requiresSG ? (a.sgPlacement ? 'Study group manually selected for this asynchronous class.' : 'Asynchronous class: choose a manual SG time when adding/editing tutor block.') : ''
+    }));
+  }
+
+  if(isEdit){
+    const idx = cetClasses.findIndex(c => String(c.id) === String(editId));
+    if(idx >= 0) cetClasses[idx] = normalizeCETClass(obj);
+  } else {
+    cetClasses.push(normalizeCETClass(obj));
+  }
+
+  closeClassModal();
+  renderCET();
+  showToast(isEdit ? 'Class updated.' : `"${title}" added.`, 'ok', 2500);
+}
+
+function normalizeCETClass(cls){
+  if(!cls) return cls;
+  if(!Array.isArray(cls.assignments)) cls.assignments = [];
+
+  if(cls.modality === 'async'){
+    cls.days = [];
+    cls.startTime = '';
+    cls.endTime = '';
+  }
+
+  if(cls.assignedTutorId && !cls.assignments.some(a => String(a.tutorId) === String(cls.assignedTutorId))){
+    cls.assignments.push({
+      id: Date.now() + Math.random(),
+      tutorId: cls.assignedTutorId,
+      days: cls.modality === 'async' ? [] : (Array.isArray(cls.days) ? [...cls.days] : []),
+      startTime: cls.modality === 'async' ? '' : (cls.startTime || ''),
+      endTime: cls.modality === 'async' ? '' : (cls.endTime || ''),
+      weeklyHours: cls.modality === 'async' ? classContactHours(cls) : Number(cls.hrsPerWeek || 0),
+      asyncCoursework: cls.modality === 'async',
+      note: 'Imported from older single-tutor CET assignment'
+    });
+  }
+  cls.assignedTutorId = null;
+
+  cls.assignments = cls.assignments.map(a => {
+    const isAsync = cls.modality === 'async';
+    const sgPlacement = a.sgPlacement || null;
+    const requiresSG = cls.requiresStudyGroup !== false;
+    return {
+      id: a.id || Date.now() + Math.random(),
+      tutorId: Number(a.tutorId),
+      days: isAsync ? [] : (Array.isArray(a.days) ? a.days : []),
+      startTime: isAsync ? '' : (a.startTime || cls.startTime || ''),
+      endTime: isAsync ? '' : (a.endTime || cls.endTime || ''),
+      weeklyHours: isAsync ? Number(a.weeklyHours ?? classContactHours(cls) ?? 0) : Number(a.weeklyHours ?? calcCETAssignmentHours(a) ?? 0),
+      asyncCoursework: isAsync || !!a.asyncCoursework,
+      note: a.note || '',
+      sgStatus: requiresSG ? (sgPlacement ? 'scheduled' : (a.sgStatus || (isAsync ? 'manual-needed' : 'pending'))) : 'not-needed',
+      sgPlacement,
+      sgNote: a.sgNote || (requiresSG ? (isAsync ? 'Asynchronous class: SG must be manually selected.' : '') : '')
+    };
+  }).filter(a => a.tutorId && (cls.modality === 'async' ? (a.weeklyHours >= 0) : (a.days.length && a.weeklyHours > 0)));
+
+  return cls;
+}
+
+function cetAssignmentTimeLabel(a){
+  if(a && a.asyncCoursework){
+    return `Async coursework · ${formatCETHours(a.weeklyHours || 0)}/wk`;
+  }
+  return `${(a.days||[]).map(d=>d.slice(0,3)).join(', ')} · ${fmtTime(a.startTime)}–${fmtTime(a.endTime)}`;
+}
+
+function resetCETStudyGroupStatus(){
+  normalizeAllCETClasses();
+  cetClasses.forEach(cls => {
+    (cls.assignments || []).forEach(a => {
+      if(assignmentNeedsStudyGroup(cls, a)){
+        if(cls.modality === 'async'){
+          a.sgStatus = a.sgPlacement ? 'scheduled' : 'manual-needed';
+          a.sgNote = a.sgPlacement ? 'Study group manually selected for this asynchronous class.' : 'Asynchronous class: SG must be manually selected.';
+        } else {
+          a.sgStatus = 'pending';
+          a.sgPlacement = null;
+          a.sgNote = 'Study group has not been scheduled yet.';
+        }
+      } else {
+        a.sgStatus = 'not-needed';
+        a.sgPlacement = null;
+        a.sgNote = '';
+      }
+    });
+  });
+}
+
+function openCETAssignModal(classId){
+  normalizeAllCETClasses();
+  const cls = cetClasses.find(c => String(c.id) === String(classId));
+  if(!cls) return;
+  if(!tutors.length){ showToast('Add tutors to the roster first.', 'warn'); return; }
+  closeCETAssignModal();
+
+  const isAsync = cls.modality === 'async';
+  const needsSG = cls.requiresStudyGroup !== false;
+  const ov = document.createElement('div');
+  ov.id = 'cet-assign-overlay';
+  ov.className = 'cet-modal-overlay';
+  const classDays = Array.isArray(cls.days) && cls.days.length ? cls.days : ALL_DAYS;
+  const focused = cetFocusedTutorId || '';
+  const courseworkHours = Math.max(0, Number(cls.hrsPerWeek || 0) - (needsSG ? 1 : 0));
+
+  ov.innerHTML = `<div class="cet-modal cet-assign-modal" role="dialog" aria-modal="true">
+    <div class="cet-modal-header"><h3>Add CET tutor block</h3><button class="cet-modal-close" onclick="closeCETAssignModal()">&times;</button></div>
+    <div class="cet-modal-body">
+      <div class="cet-study-note" style="margin-top:0">${cetEsc(cls.title || 'This class')} · ${isAsync ? 'asynchronous class: choose the tutor and, if needed, the manual SG time.' : 'choose exactly which days and times this tutor will attend.'}</div>
+      <div class="form-grid two" style="margin-top:12px">
+        <div class="fg"><span class="fl">Tutor</span><select id="ca-tutor" onchange="updateCETAssignPreview(${cls.id})">
+          <option value="">— Select tutor —</option>
+          ${tutors.map(t => `<option value="${t.id}" ${String(focused)===String(t.id)?'selected':''}>${cetEsc(t.name)} · ${formatCETHours(tutorCETRemainingHrs(t))} left</option>`).join('')}
+        </select></div>
+        <div class="fg"><span class="fl">Calculated hours</span><div class="cet-calc-box" id="ca-hours-preview">Select tutor${isAsync && needsSG ? ' and SG time' : ' and times'}</div></div>
+      </div>
+
+      ${isAsync ? `
+        <div class="cet-async-note"><strong>Async class:</strong> no class meeting day/time is needed. ${formatCETHours(courseworkHours)} is counted as coursework/keeping-up time.${needsSG ? ' Choose the 1-hour study group time below.' : ''}</div>
+        ${needsSG ? `
+        <div class="form-grid" style="margin-top:12px;grid-template-columns:1fr 1fr">
+          <div class="fg"><span class="fl">SG day</span><select id="ca-sg-day" onchange="updateCETAssignPreview(${cls.id})">
+            <option value="">— Select day —</option>
+            ${ALL_DAYS.map(d=>`<option value="${d}">${d}</option>`).join('')}
+          </select></div>
+          <div class="fg"><span class="fl">SG start time</span>${cetTimePickerHTML('ca-sg-start', '', `updateCETAssignPreview(${cls.id})`)}</div>
+        </div>` : ''}
+      ` : `
+        <div style="margin-top:12px"><span class="fl" style="display:block;margin-bottom:6px">Days this tutor attends</span><div class="cet-day-checkboxes">
+          ${classDays.map(d => `<label class="cet-day-label"><input type="checkbox" name="ca-days" value="${d}" checked onchange="updateCETAssignPreview(${cls.id})"> ${d.slice(0,3)}</label>`).join('')}
+        </div></div>
+        <div class="form-grid two" style="margin-top:12px">
+          <div class="fg"><span class="fl">CET start time</span>${cetTimePickerHTML('ca-start', cls.startTime || '', `updateCETAssignPreview(${cls.id})`)}</div>
+          <div class="fg"><span class="fl">CET end time</span>${cetTimePickerHTML('ca-end', cls.endTime || '', `updateCETAssignPreview(${cls.id})`)}</div>
+        </div>
+      `}
+      <div id="ca-warning" class="cet-assign-warning" style="display:none"></div>
+    </div>
+    <div class="cet-modal-footer"><button class="btn" onclick="closeCETAssignModal()">Cancel</button><button class="btn btn-red" onclick="saveCETAssignment(${cls.id})"><i class="ti ti-check"></i> Add tutor block</button></div>
+  </div>`;
+
+  document.body.appendChild(ov);
+  ov.addEventListener('click', e => { if(e.target === ov) closeCETAssignModal(); });
+  updateCETAssignPreview(classId);
+}
+
+function getCETAssignDraft(classId){
+  cetSyncAllTimePickers();
+  const cls = cetClasses.find(c => String(c.id) === String(classId));
+  const isAsync = cls && cls.modality === 'async';
+  const needsSG = cls && cls.requiresStudyGroup !== false;
+  const tutorId = parseInt(document.getElementById('ca-tutor')?.value || '', 10);
+  if(isAsync){
+    const sgDay = document.getElementById('ca-sg-day')?.value || '';
+    const sgStart = document.getElementById('ca-sg-start')?.value || '';
+    const sgEnd = sgStart ? oneHourEndTime(sgStart) : '';
+    const weeklyHours = Math.max(0, Number(cls.hrsPerWeek || 0) - (needsSG ? 1 : 0));
+    return { tutorId, days:[], startTime:'', endTime:'', weeklyHours, asyncCoursework:true, sgDay, sgStart, sgEnd };
+  }
+  const days = [...document.querySelectorAll('input[name="ca-days"]:checked')].map(el=>el.value);
+  const startTime = document.getElementById('ca-start')?.value || '';
+  const endTime = document.getElementById('ca-end')?.value || '';
+  return { tutorId, days, startTime, endTime, weeklyHours: calcCETAssignmentHours({days,startTime,endTime}) };
+}
+
+function updateCETAssignPreview(classId){
+  const cls = cetClasses.find(c => String(c.id) === String(classId));
+  const preview = document.getElementById('ca-hours-preview');
+  const warning = document.getElementById('ca-warning');
+  if(!preview || !cls) return;
+  const draft = getCETAssignDraft(classId);
+  const isAsync = cls.modality === 'async';
+  const needsSG = cls.requiresStudyGroup !== false;
+  const tutor = tutors.find(t => String(t.id) === String(draft.tutorId));
+
+  if(isAsync){
+    const total = Number(draft.weeklyHours || 0) + (needsSG && draft.sgDay && draft.sgStart ? 1 : 0);
+    preview.textContent = needsSG
+      ? (draft.sgDay && draft.sgStart ? `${formatCETHours(total)} / week (${formatCETHours(draft.weeklyHours)} coursework + 1h SG)` : `${formatCETHours(draft.weeklyHours)} coursework + choose 1h SG`)
+      : `${formatCETHours(draft.weeklyHours)} / week`;
+  } else {
+    preview.textContent = draft.weeklyHours > 0 ? `${formatCETHours(draft.weeklyHours)} / week` : 'Select days and valid times';
+  }
+
+  if(!warning) return;
+  const notes = [];
+  if(!tutor){ warning.style.display='none'; warning.innerHTML=''; return; }
+
+  const remaining = tutorCETRemainingHrs(tutor);
+  const totalNeeded = Number(draft.weeklyHours || 0) + (isAsync && needsSG ? 1 : 0);
+  if(totalNeeded > remaining) notes.push(`${cetEsc(tutor.name)} only has ${formatCETHours(remaining)} left, but this block needs ${formatCETHours(totalNeeded)}.`);
+
+  if(isAsync){
+    if(needsSG){
+      if(!draft.sgDay || !draft.sgStart){
+        notes.push('Choose a manual SG day and start time for this asynchronous class.');
+      } else {
+        if(!isOneHourBlockInsideCAS(draft.sgDay, draft.sgStart)) notes.push('The SG must be a full 1-hour block inside CAS operating hours.');
+        if(!tutorAvailableForOneHourBlock(tutor, draft.sgDay, draft.sgStart)) notes.push(`${cetEsc(tutor.name)} is not available for the full selected SG hour.`);
+        const overlaps = [draft.sgStart, minsToScheduleTime(timeToMins(draft.sgStart)+30)].some(t => isTutorBusyWithCET(tutor.id, draft.sgDay, t));
+        if(overlaps) notes.push('This SG overlaps another CET/SG block for this tutor.');
+      }
+    }
+  } else {
+    if(!draft.days.length || !draft.startTime || !draft.endTime || draft.weeklyHours <= 0){
+      notes.push('Select days and a valid CET start/end time.');
+    } else {
+      const busy = draft.days.filter(day => {
+        for(let m = timeToMins(draft.startTime); m < timeToMins(draft.endTime); m += 30){
+          if(isTutorBusyWithCET(tutor.id, day, minsToScheduleTime(m))) return true;
+        }
+        return false;
+      });
+      if(busy.length) notes.push(`This tutor already has a CET block overlapping on: ${busy.join(', ')}.`);
+      const missing = [];
+      draft.days.forEach(day => {
+        for(let m = timeToMins(draft.startTime); m < timeToMins(draft.endTime); m += 30){
+          const key = slotKeyFor(day, m);
+          if(!(tutor.avail && tutor.avail[key] === true)) missing.push(`${day} ${minsToTimeLabel(m)}`);
+        }
+      });
+      if(missing.length) notes.push(`Availability warning: ${cetEsc(tutor.name)} is not marked available for every selected slot. You can still assign if this is intentional.`);
+    }
+  }
+
+  if(notes.length){
+    warning.style.display = 'block';
+    warning.innerHTML = notes.map(n=>`<div>${n}</div>`).join('');
+  } else {
+    warning.style.display = 'none';
+    warning.innerHTML = '';
+  }
+}
+
+function saveCETAssignment(classId){
+  normalizeAllCETClasses();
+  const cls = cetClasses.find(c => String(c.id) === String(classId));
+  if(!cls) return;
+  const draft = getCETAssignDraft(classId);
+  const tutor = tutors.find(t => String(t.id) === String(draft.tutorId));
+  const isAsync = cls.modality === 'async';
+  const needsSG = assignmentNeedsStudyGroup(cls, {tutorId:draft.tutorId});
+
+  if(!tutor){ showToast('Select a tutor first.', 'warn'); return; }
+
+  if(isAsync){
+    if(needsSG){
+      if(!draft.sgDay || !draft.sgStart){ showToast('Choose the SG day and start time for this asynchronous class.', 'warn'); return; }
+      if(!isOneHourBlockInsideCAS(draft.sgDay, draft.sgStart)){ showToast('The selected SG must be inside CAS operating hours.', 'warn'); return; }
+      if(!tutorAvailableForOneHourBlock(tutor, draft.sgDay, draft.sgStart)){ showToast(`${tutor.name} is not available for the full selected SG hour.`, 'warn'); return; }
+      const overlaps = [draft.sgStart, minsToScheduleTime(timeToMins(draft.sgStart)+30)].some(t => isTutorBusyWithCET(tutor.id, draft.sgDay, t));
+      if(overlaps){ showToast('This SG overlaps another CET/SG block for this tutor.', 'warn'); return; }
+    }
+  } else {
+    if(!draft.days.length){ showToast('Select at least one day for this CET block.', 'warn'); return; }
+    if(!draft.startTime || !draft.endTime || timeToMins(draft.endTime) <= timeToMins(draft.startTime)){ showToast('Enter a valid CET start and end time.', 'warn'); return; }
+  }
+
+  const sgPlacement = isAsync && needsSG ? {
+    day: draft.sgDay,
+    startTime: draft.sgStart,
+    endTime: draft.sgEnd,
+    weeklyHours: 1,
+    manual: true
+  } : null;
+
+  const totalNeeded = Number(draft.weeklyHours || 0) + (sgPlacement ? 1 : 0);
+  const remaining = tutorCETRemainingHrs(tutor);
+  if(totalNeeded > remaining){ showToast(`${tutor.name} only has ${formatCETHours(remaining)} left, but this block needs ${formatCETHours(totalNeeded)}.`, 'warn'); return; }
+
+  const addNow = () => {
+    cls.assignments.push({
+      id: Date.now() + Math.random(),
+      tutorId: tutor.id,
+      days: isAsync ? [] : draft.days,
+      startTime: isAsync ? '' : draft.startTime,
+      endTime: isAsync ? '' : draft.endTime,
+      weeklyHours: draft.weeklyHours,
+      asyncCoursework: isAsync,
+      sgStatus: needsSG ? (sgPlacement ? 'scheduled' : 'pending') : 'not-needed',
+      sgPlacement,
+      sgNote: needsSG ? (sgPlacement ? 'Study group manually selected for this asynchronous class.' : 'Study group will be auto-placed when the schedule is generated if a before/after class slot is available.') : ''
+    });
+    closeCETAssignModal();
+    renderCET();
+    showToast(`${tutor.name} added to ${cls.title}. ${formatCETHours(totalNeeded)} deducted from CAS hours.${sgPlacement ? ' SG time saved.' : needsSG ? ' SG will be checked during schedule generation.' : ''}`, 'ok', 5500);
+  };
+
+  if(!isAsync){
+    const warnings = [];
+    const missing = [];
+    draft.days.forEach(day => {
+      for(let m = timeToMins(draft.startTime); m < timeToMins(draft.endTime); m += 30){
+        const key = slotKeyFor(day, m);
+        if(!(tutor.avail && tutor.avail[key] === true)) missing.push(`${day} ${minsToTimeLabel(m)}`);
+      }
+    });
+    if(missing.length) warnings.push(`${tutor.name} is not marked available for every selected CET slot.`);
+    const overlaps = [];
+    draft.days.forEach(day => {
+      for(let m = timeToMins(draft.startTime); m < timeToMins(draft.endTime); m += 30){
+        if(isTutorBusyWithCET(tutor.id, day, minsToScheduleTime(m))) { overlaps.push(day); break; }
+      }
+    });
+    if(overlaps.length) warnings.push(`${tutor.name} already has another CET block overlapping on ${[...new Set(overlaps)].join(', ')}.`);
+    if(warnings.length){
+      showConfirm('Add CET block with warning?', warnings.join('\n\n') + '\n\nYou can still add this block if this is intentional.', addNow, 'Add anyway');
+      return;
+    }
+  }
+  addNow();
+}

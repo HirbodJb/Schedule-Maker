@@ -398,3 +398,20 @@
   opacity:1!important;
   width:max-content;
 }
+
+
+/* Async CET / manual SG UI */
+.cet-async-note{
+  margin-top:12px;
+  background:#f7fbff;
+  border:1px solid #b5d4f4;
+  color:#0c447c;
+  border-radius:11px;
+  padding:10px 12px;
+  font-size:12px;
+  line-height:1.5;
+  font-weight:650;
+}
+#cm-class-schedule-fields[style*="display: none"]{
+  display:none!important;
+}
