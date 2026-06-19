@@ -1324,6 +1324,15 @@ function getCETAssignDraft(){
   return { tutorId, days, startTime, endTime, weeklyHours: calcCETAssignmentHours({days,startTime,endTime}) };
 }
 
+
+function cetDayUsesAvailabilityGrid(day){
+  // Saturday CET eligibility comes from the roster's "Available Saturday" flag,
+  // not from the weekday availability grid. Jamie does not collect Saturday
+  // time-slot availability, so Saturday-only CET blocks should not show the
+  // missing-availability warning.
+  return day !== 'Saturday';
+}
+
 function updateCETAssignPreview(classId){
   const preview = document.getElementById('ca-hours-preview');
   const warning = document.getElementById('ca-warning');
@@ -1349,6 +1358,7 @@ function updateCETAssignPreview(classId){
 
   const missing = [];
   draft.days.forEach(day => {
+    if(!cetDayUsesAvailabilityGrid(day)) return;
     for(let m = timeToMins(draft.startTime); m < timeToMins(draft.endTime); m += 30){
       const key = slotKeyFor(day, m);
       if(!(tutor.avail && tutor.avail[key] === true)){
@@ -1406,6 +1416,7 @@ function saveCETAssignment(classId){
 
   const missing = [];
   draft.days.forEach(day => {
+    if(!cetDayUsesAvailabilityGrid(day)) return;
     for(let m = timeToMins(draft.startTime); m < timeToMins(draft.endTime); m += 30){
       const key = slotKeyFor(day, m);
       if(!(tutor.avail && tutor.avail[key] === true)) missing.push(`${day} ${minsToTimeLabel(m)}`);
@@ -1989,6 +2000,15 @@ function getCETAssignDraft(classId){
   return { tutorId, days, startTime, endTime, weeklyHours: calcCETAssignmentHours({days,startTime,endTime}) };
 }
 
+
+function cetDayUsesAvailabilityGrid(day){
+  // Saturday CET eligibility comes from the roster's "Available Saturday" flag,
+  // not from the weekday availability grid. Jamie does not collect Saturday
+  // time-slot availability, so Saturday-only CET blocks should not show the
+  // missing-availability warning.
+  return day !== 'Saturday';
+}
+
 function updateCETAssignPreview(classId){
   const cls = cetClasses.find(c => String(c.id) === String(classId));
   const preview = document.getElementById('ca-hours-preview');
@@ -2040,6 +2060,7 @@ function updateCETAssignPreview(classId){
       if(busy.length) notes.push(`This tutor already has a CET block overlapping on: ${busy.join(', ')}.`);
       const missing = [];
       draft.days.forEach(day => {
+        if(!cetDayUsesAvailabilityGrid(day)) return;
         for(let m = timeToMins(draft.startTime); m < timeToMins(draft.endTime); m += 30){
           const key = slotKeyFor(day, m);
           if(!(tutor.avail && tutor.avail[key] === true)) missing.push(`${day} ${minsToTimeLabel(m)}`);
@@ -2117,6 +2138,7 @@ function saveCETAssignment(classId){
     const warnings = [];
     const missing = [];
     draft.days.forEach(day => {
+      if(!cetDayUsesAvailabilityGrid(day)) return;
       for(let m = timeToMins(draft.startTime); m < timeToMins(draft.endTime); m += 30){
         const key = slotKeyFor(day, m);
         if(!(tutor.avail && tutor.avail[key] === true)) missing.push(`${day} ${minsToTimeLabel(m)}`);
