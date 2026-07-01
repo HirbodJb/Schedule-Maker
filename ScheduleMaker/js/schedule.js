@@ -113,6 +113,124 @@ function cetStudyGroupWarningBanner(){
   return `<div class="sg-warning-banner"><div><strong><i class="ti ti-alert-triangle"></i> Study groups needing manual time</strong><ul>${items}</ul></div></div>`;
 }
 
+
+
+// ── Shift compaction helpers ───────────────────────────────
+// These helpers make generated schedules more tutor-friendly by strongly
+// preferring continuous daily blocks over split shifts with long gaps.
+// They do not override hard rules: availability, CET conflicts, max hours,
+// weekly budget, and max consecutive-work limits still apply first.
+function scheduleTimeIndexForDay(day, time){
+  const times = timesForDay(day);
+  return times.indexOf(time);
+}
+
+function scheduleSlotTimeAt(day, index){
+  const times = timesForDay(day);
+  return times[index] || null;
+}
+
+function scheduleSlotHasTutorWorkIncludingCET(slots, tutorId, day, time){
+  const slot = scheduleFindSlot(slots, day, time);
+  if(scheduleSlotHasTutor(slot, tutorId)) return true;
+
+  // CET display blocks are not stored in slot.assigned, but they are real
+  // work commitments and should count when judging daily gaps/compactness.
+  if(typeof getCETDisplayBlocksForSlot === 'function'){
+    return (getCETDisplayBlocksForSlot(day, time) || []).some(x => String(x.id) === String(tutorId));
+  }
+
+  return false;
+}
+
+function scheduleTutorWorkIndicesForDay(tutor, day, slots){
+  const times = timesForDay(day);
+  const out = [];
+  times.forEach((time, idx) => {
+    if(scheduleSlotHasTutorWorkIncludingCET(slots, tutor.id, day, time)) out.push(idx);
+  });
+  return out;
+}
+
+function scheduleCountDailyBlocksFromIndices(indices){
+  if(!indices.length) return 0;
+  const sorted = [...new Set(indices)].sort((a,b)=>a-b);
+  let blocks = 1;
+  for(let i=1;i<sorted.length;i++){
+    if(sorted[i] !== sorted[i-1] + 1) blocks++;
+  }
+  return blocks;
+}
+
+function scheduleGapMinutesBetweenIndexSets(existingIndices, newIndex){
+  if(!existingIndices.length) return null;
+
+  let bestSlotGap = Infinity;
+  existingIndices.forEach(idx => {
+    // If newIndex is adjacent, gap is zero minutes.
+    // If one 30-minute slot separates them, gap is 30 minutes, etc.
+    const rawGap = Math.abs(newIndex - idx) - 1;
+    bestSlotGap = Math.min(bestSlotGap, Math.max(0, rawGap));
+  });
+
+  return bestSlotGap * 30;
+}
+
+function scheduleShiftCompactionScore(tutor, slot, slots){
+  const target = Math.max(Number(tutor.hrs) || 1, 1);
+  const assigned = Number(tutor.assignedHrs) || 0;
+  const utilization = assigned / target;
+
+  const idx = scheduleTimeIndexForDay(slot.day, slot.time);
+  const existing = scheduleTutorWorkIndicesForDay(tutor, slot.day, slots);
+  const currentBlocks = scheduleCountDailyBlocksFromIndices(existing);
+  const newBlocks = scheduleCountDailyBlocksFromIndices([...existing, idx]);
+  const gapMins = scheduleGapMinutesBetweenIndexSets(existing, idx);
+
+  let score = 0;
+
+  // Keep the original fairness idea: under-scheduled tutors still get priority.
+  score += (1 - utilization) * 45;
+
+  // Strongly prefer extending a block that already exists.
+  if(gapMins === 0) score += 120;
+  else if(gapMins === 30) score += 75;
+  else if(gapMins === 60) score += 35;
+  else if(gapMins === 90) score += 10;
+
+  // Strongly discourage creating a separated second/third block on the same day.
+  if(newBlocks > currentBlocks && currentBlocks > 0){
+    score -= 85;
+    if(gapMins !== null) score -= Math.min(90, Math.floor(gapMins / 30) * 12);
+  }
+
+  // If a tutor already has a split day, prefer filling the gap between blocks.
+  if(existing.length >= 2){
+    const minIdx = Math.min(...existing);
+    const maxIdx = Math.max(...existing);
+    if(idx > minIdx && idx < maxIdx) score += 45;
+  }
+
+  // Slightly prefer people with fewer total assigned hours as a tie-breaker.
+  score -= assigned * 0.75;
+
+  // Stable deterministic tie-breaker so results do not feel random.
+  score -= (String(tutor.name || '').charCodeAt(0) || 0) / 10000;
+
+  return score;
+}
+
+function sortEligibleTutorsForSlot(eligible, slot, slots){
+  eligible.sort((a,b) => {
+    const diff = scheduleShiftCompactionScore(b, slot, slots) - scheduleShiftCompactionScore(a, slot, slots);
+    if(Math.abs(diff) > 0.0001) return diff;
+
+    const aRatio = (Number(a.assignedHrs)||0) / Math.max(Number(a.hrs)||1,1);
+    const bRatio = (Number(b.assignedHrs)||0) / Math.max(Number(b.hrs)||1,1);
+    return aRatio - bRatio;
+  });
+}
+
 // ── Schedule Generation, Rendering & Export ─────────────────
 function generateSchedule(){
   // Always read the latest semester dropdown before generating.
@@ -153,7 +271,7 @@ function generateSchedule(){
         && t.assignedHrs<t.hrs
         && !wouldExceedConsecutiveLimit(t,slot.day,slot.time,allSlots);
     });
-    eligible.sort((a,b)=>(a.assignedHrs/a.hrs)-(b.assignedHrs/b.hrs));
+    sortEligibleTutorsForSlot(eligible, slot, allSlots);
     for(const t of eligible.slice(0,3)){
       if(!canAssignMoreBudget(0.5)) break;
       t.assignedHrs+=0.5;
