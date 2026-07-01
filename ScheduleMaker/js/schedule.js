@@ -1291,7 +1291,13 @@ function isStudyGroupBlockValid(tutor, day, startTime, slots, cls=null, assignme
   const times = timesForDay(day);
   const startMins = timeToMins(startTime);
   const blockTimes = [startTime, minsToScheduleTime(startMins + 30)];
+
   if(!blockTimes.every(t => times.includes(t))) return false;
+
+  // Final safety guard: an SG must never overlap the full class meeting time.
+  // This is especially important when the CET tutor only attends part of the class.
+  // Example: class 9am–12pm, tutor CET 9am–10:30am -> SG cannot be 10:30am–11:30am.
+  if(studyGroupBlockOverlapsClassMeeting(cls, day, startTime)) return false;
 
   return blockTimes.every(t => {
     const key = scheduleSlotKey(day, t);
@@ -1373,10 +1379,17 @@ function autoPlaceCETStudyGroups(slots){
 
       const candidates = [];
       (a.days || []).forEach(day => {
-        const after = a.endTime;
-        const before = minsToScheduleTime(timeToMins(a.startTime) - 60);
-        candidates.push({day, startTime: after, priority: 'after'});
-        candidates.push({day, startTime: before, priority: 'before'});
+        // Use the full class meeting time, not the tutor's partial CET block.
+        // Students are still in class until cls.endTime, so SG can only be
+        // immediately before the full class or immediately after the full class.
+        const classStart = cls.startTime || a.startTime;
+        const classEnd = cls.endTime || a.endTime;
+
+        const after = classEnd;
+        const before = minsToScheduleTime(timeToMins(classStart) - 60);
+
+        candidates.push({day, startTime: after, priority: 'after-full-class'});
+        candidates.push({day, startTime: before, priority: 'before-full-class'});
       });
 
       const chosen = candidates.find(c => isStudyGroupBlockValid(tutor, c.day, c.startTime, slots, cls, a));
