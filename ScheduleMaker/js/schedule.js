@@ -115,19 +115,24 @@ function cetStudyGroupWarningBanner(){
 
 
 
-// ── Shift compaction helpers ───────────────────────────────
-// These helpers make generated schedules more tutor-friendly by strongly
-// preferring continuous daily blocks over split shifts with long gaps.
-// They do not override hard rules: availability, CET conflicts, max hours,
-// weekly budget, and max consecutive-work limits still apply first.
+// ── v2.1 Compact-shift schedule generation helpers ─────────
+// This version builds tutor-friendly continuous blocks instead of only
+// choosing tutors one slot at a time. Hard constraints still win:
+// availability, CET conflicts, SG blocks, weekly hours, weekly budget,
+// and the max-consecutive-hours rule are all checked before assigning.
+
+const SCHEDULE_TARGET_COVERAGE = 3;
+const SCHEDULE_MIN_BLOCK_SLOTS = 2; // prefer at least 1-hour blocks when possible
+
+function scheduleRegularAssignmentCount(slot){
+  return slot && slot.assigned
+    ? slot.assigned.filter(x => !x._type).length
+    : 0;
+}
+
 function scheduleTimeIndexForDay(day, time){
   const times = timesForDay(day);
   return times.indexOf(time);
-}
-
-function scheduleSlotTimeAt(day, index){
-  const times = timesForDay(day);
-  return times[index] || null;
 }
 
 function scheduleSlotHasTutorWorkIncludingCET(slots, tutorId, day, time){
@@ -135,7 +140,7 @@ function scheduleSlotHasTutorWorkIncludingCET(slots, tutorId, day, time){
   if(scheduleSlotHasTutor(slot, tutorId)) return true;
 
   // CET display blocks are not stored in slot.assigned, but they are real
-  // work commitments and should count when judging daily gaps/compactness.
+  // work commitments and should count when judging daily comfort/gaps.
   if(typeof getCETDisplayBlocksForSlot === 'function'){
     return (getCETDisplayBlocksForSlot(day, time) || []).some(x => String(x.id) === String(tutorId));
   }
@@ -164,72 +169,206 @@ function scheduleCountDailyBlocksFromIndices(indices){
 
 function scheduleGapMinutesBetweenIndexSets(existingIndices, newIndex){
   if(!existingIndices.length) return null;
-
   let bestSlotGap = Infinity;
   existingIndices.forEach(idx => {
-    // If newIndex is adjacent, gap is zero minutes.
-    // If one 30-minute slot separates them, gap is 30 minutes, etc.
     const rawGap = Math.abs(newIndex - idx) - 1;
     bestSlotGap = Math.min(bestSlotGap, Math.max(0, rawGap));
   });
-
   return bestSlotGap * 30;
 }
 
-function scheduleShiftCompactionScore(tutor, slot, slots){
+function scheduleCanUseBudget(hours){
+  return typeof canAssignMoreBudget !== 'function' || canAssignMoreBudget(hours);
+}
+
+function scheduleTutorHasRemainingHalfHour(tutor){
+  return Number(tutor.assignedHrs || 0) + 0.5 <= Number(tutor.hrs || 0) + 0.0001;
+}
+
+function scheduleIsTutorAssignableToSlot(tutor, slot, slots, targetCoverage){
+  if(!tutor || !slot) return false;
+  const key = slot.day + '-' + slot.time;
+
+  return (typeof isOperationalSlot !== 'function' || isOperationalSlot(slot.day, slot.time))
+    && tutor.avail && tutor.avail[key] === true
+    && scheduleRegularAssignmentCount(slot) < targetCoverage
+    && !scheduleSlotHasTutor(slot, tutor.id)
+    && !(typeof isTutorBusyWithCET === 'function' && isTutorBusyWithCET(tutor, slot.day, slot.time))
+    && scheduleTutorHasRemainingHalfHour(tutor)
+    && scheduleCanUseBudget(0.5)
+    && !(typeof wouldExceedConsecutiveLimit === 'function' && wouldExceedConsecutiveLimit(tutor, slot.day, slot.time, slots));
+}
+
+function scheduleCandidateScore(tutor, day, candidateSlots, slots, targetCoverage){
   const target = Math.max(Number(tutor.hrs) || 1, 1);
   const assigned = Number(tutor.assignedHrs) || 0;
   const utilization = assigned / target;
 
-  const idx = scheduleTimeIndexForDay(slot.day, slot.time);
-  const existing = scheduleTutorWorkIndicesForDay(tutor, slot.day, slots);
+  const times = timesForDay(day);
+  const existing = scheduleTutorWorkIndicesForDay(tutor, day, slots);
+  const candidateIndices = candidateSlots.map(slot => times.indexOf(slot.time)).filter(i=>i>=0);
+  const firstIdx = Math.min(...candidateIndices);
+  const lastIdx = Math.max(...candidateIndices);
   const currentBlocks = scheduleCountDailyBlocksFromIndices(existing);
-  const newBlocks = scheduleCountDailyBlocksFromIndices([...existing, idx]);
-  const gapMins = scheduleGapMinutesBetweenIndexSets(existing, idx);
+  const newBlocks = scheduleCountDailyBlocksFromIndices([...existing, ...candidateIndices]);
+  const gapToStart = scheduleGapMinutesBetweenIndexSets(existing, firstIdx);
+  const gapToEnd = scheduleGapMinutesBetweenIndexSets(existing, lastIdx);
+  const bestGap = [gapToStart, gapToEnd].filter(x=>x!==null).sort((a,b)=>a-b)[0];
 
   let score = 0;
 
-  // Keep the original fairness idea: under-scheduled tutors still get priority.
-  score += (1 - utilization) * 45;
+  // Main goal: meaningful continuous work blocks.
+  score += candidateSlots.length * 55;
 
-  // Strongly prefer extending a block that already exists.
-  if(gapMins === 0) score += 120;
-  else if(gapMins === 30) score += 75;
-  else if(gapMins === 60) score += 35;
-  else if(gapMins === 90) score += 10;
+  // Keep fairness from the old generator.
+  score += (1 - utilization) * 55;
 
-  // Strongly discourage creating a separated second/third block on the same day.
+  // Prefer blocks that extend or sit close to existing work.
+  if(bestGap === 0) score += 160;
+  else if(bestGap === 30) score += 95;
+  else if(bestGap === 60) score += 45;
+  else if(bestGap === 90) score += 10;
+
+  // Strongly discourage creating split shifts when the tutor already has a block.
   if(newBlocks > currentBlocks && currentBlocks > 0){
-    score -= 85;
-    if(gapMins !== null) score -= Math.min(90, Math.floor(gapMins / 30) * 12);
+    score -= 135;
+    if(bestGap !== undefined && bestGap !== null){
+      score -= Math.min(140, Math.floor(bestGap / 30) * 18);
+    }
   }
 
-  // If a tutor already has a split day, prefer filling the gap between blocks.
+  // If a tutor already has a split day, filling the middle gap is helpful.
   if(existing.length >= 2){
-    const minIdx = Math.min(...existing);
-    const maxIdx = Math.max(...existing);
-    if(idx > minIdx && idx < maxIdx) score += 45;
+    const minExisting = Math.min(...existing);
+    const maxExisting = Math.max(...existing);
+    if(firstIdx > minExisting && lastIdx < maxExisting) score += 75;
   }
 
-  // Slightly prefer people with fewer total assigned hours as a tie-breaker.
-  score -= assigned * 0.75;
+  // Prioritize slots with less current coverage while moving through target levels.
+  const coverageNeed = candidateSlots.reduce((sum, slot)=>{
+    return sum + Math.max(0, targetCoverage - scheduleRegularAssignmentCount(slot));
+  }, 0);
+  score += coverageNeed * 20;
 
-  // Stable deterministic tie-breaker so results do not feel random.
+  // Slight tie-breakers for deterministic, balanced output.
+  score -= assigned * 0.8;
   score -= (String(tutor.name || '').charCodeAt(0) || 0) / 10000;
 
   return score;
 }
 
-function sortEligibleTutorsForSlot(eligible, slot, slots){
-  eligible.sort((a,b) => {
-    const diff = scheduleShiftCompactionScore(b, slot, slots) - scheduleShiftCompactionScore(a, slot, slots);
-    if(Math.abs(diff) > 0.0001) return diff;
+function scheduleBuildTutorRunsForDay(tutor, day, slots, targetCoverage){
+  const times = timesForDay(day);
+  const runs = [];
+  let current = [];
 
-    const aRatio = (Number(a.assignedHrs)||0) / Math.max(Number(a.hrs)||1,1);
-    const bRatio = (Number(b.assignedHrs)||0) / Math.max(Number(b.hrs)||1,1);
-    return aRatio - bRatio;
+  const flush = () => {
+    if(current.length) runs.push(current);
+    current = [];
+  };
+
+  times.forEach(time => {
+    const slot = scheduleFindSlot(slots, day, time);
+    if(scheduleIsTutorAssignableToSlot(tutor, slot, slots, targetCoverage)){
+      current.push(slot);
+    } else {
+      flush();
+    }
+  });
+  flush();
+
+  return runs;
+}
+
+function scheduleMaxBlockSlotsForTutor(tutor){
+  const remainingByTutor = Math.floor(Math.max(0, Number(tutor.hrs || 0) - Number(tutor.assignedHrs || 0)) / 0.5);
+  const maxByPolicy = Math.max(1, Number(MAX_CONSECUTIVE_WORK_SLOTS || 8));
+  return Math.max(0, Math.min(remainingByTutor, maxByPolicy));
+}
+
+function scheduleBuildCompactCandidates(day, slots, targetCoverage){
+  const candidates = [];
+
+  tutors.forEach(tutor => {
+    const maxSlots = scheduleMaxBlockSlotsForTutor(tutor);
+    if(maxSlots <= 0) return;
+
+    const runs = scheduleBuildTutorRunsForDay(tutor, day, slots, targetCoverage);
+
+    runs.forEach(run => {
+      if(!run.length) return;
+
+      const bestLen = Math.min(run.length, maxSlots);
+
+      // Generate windows from longest to shorter. This lets the algorithm select
+      // blocks like 9–12 before isolated 9–9:30 / 2–2:30 fragments.
+      for(let len=bestLen; len>=1; len--){
+        if(len < SCHEDULE_MIN_BLOCK_SLOTS && run.length >= SCHEDULE_MIN_BLOCK_SLOTS) continue;
+
+        for(let start=0; start<=run.length-len; start++){
+          const candidateSlots = run.slice(start, start+len);
+          const score = scheduleCandidateScore(tutor, day, candidateSlots, slots, targetCoverage);
+          candidates.push({tutor, day, slots:candidateSlots, score});
+        }
+
+        // Keep the search small and intentional. For a run, a good longest
+        // window is usually better than many tiny alternatives.
+        if(len >= SCHEDULE_MIN_BLOCK_SLOTS) break;
+      }
+    });
+  });
+
+  candidates.sort((a,b)=>b.score-a.score);
+  return candidates;
+}
+
+function scheduleAssignCandidate(candidate, slots, targetCoverage){
+  let assignedCount = 0;
+
+  for(const slot of candidate.slots){
+    if(!scheduleIsTutorAssignableToSlot(candidate.tutor, slot, slots, targetCoverage)) continue;
+    if(!scheduleCanUseBudget(0.5)) break;
+
+    candidate.tutor.assignedHrs = Number(candidate.tutor.assignedHrs || 0) + 0.5;
+    candidate.tutor.assignments.push(slot);
+    slot.assigned.push(candidate.tutor);
+    assignedCount++;
+  }
+
+  return assignedCount;
+}
+
+function scheduleNeedsMoreCoverageOnDay(day, slots, targetCoverage){
+  return timesForDay(day).some(time => {
+    const slot = scheduleFindSlot(slots, day, time);
+    return slot && scheduleRegularAssignmentCount(slot) < targetCoverage;
   });
 }
+
+function scheduleCompactFillDay(day, slots, targetCoverage){
+  let guard = 0;
+
+  while(scheduleNeedsMoreCoverageOnDay(day, slots, targetCoverage) && guard < 500){
+    guard++;
+    const candidates = scheduleBuildCompactCandidates(day, slots, targetCoverage);
+    if(!candidates.length) break;
+
+    const chosen = candidates[0];
+    const added = scheduleAssignCandidate(chosen, slots, targetCoverage);
+    if(!added) break;
+  }
+}
+
+function scheduleCompactFillAllSlots(slots){
+  const days = activeScheduleDays();
+
+  // First pass gives every possible slot at least one tutor.
+  // Later passes add backup coverage without destroying compactness.
+  for(let targetCoverage=1; targetCoverage<=SCHEDULE_TARGET_COVERAGE; targetCoverage++){
+    days.forEach(day => scheduleCompactFillDay(day, slots, targetCoverage));
+  }
+}
+
 
 // ── Schedule Generation, Rendering & Export ─────────────────
 function generateSchedule(){
@@ -261,24 +400,7 @@ function generateSchedule(){
 
   const unresolvedSG = autoPlaceCETStudyGroups(allSlots);
 
-  allSlots.forEach(slot=>{
-    const eligible=tutors.filter(t=>{
-      const key=slot.day+'-'+slot.time;
-      return (typeof isOperationalSlot !== 'function' || isOperationalSlot(slot.day, slot.time))
-        && t.avail[key]===true
-        && !scheduleSlotHasTutor(slot, t.id)
-        && !(typeof isTutorBusyWithCET==='function' && isTutorBusyWithCET(t,slot.day,slot.time))
-        && t.assignedHrs<t.hrs
-        && !wouldExceedConsecutiveLimit(t,slot.day,slot.time,allSlots);
-    });
-    sortEligibleTutorsForSlot(eligible, slot, allSlots);
-    for(const t of eligible.slice(0,3)){
-      if(!canAssignMoreBudget(0.5)) break;
-      t.assignedHrs+=0.5;
-      t.assignments.push(slot);
-      slot.assigned.push(t);
-    }
-  });
+  scheduleCompactFillAllSlots(allSlots);
 
   const covered=allSlots.filter(s=>s.assigned.length>0).length;
   const gaps=allSlots.filter(s=>s.assigned.length===0).length;

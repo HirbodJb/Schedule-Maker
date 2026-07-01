@@ -331,6 +331,62 @@ function runAIOptimize(){
   });
   longRuns.sort((a,b)=>b.hours-a.hours);
 
+  // Detect inconvenient split shifts: same tutor has separate work blocks on
+  // the same day with a long empty gap between them. This is the main comfort
+  // issue v2.1 tries to reduce during generation.
+  const splitShiftGaps=[];
+  tutors.forEach(tutor=>{
+    ALL_DAYS.forEach(day=>{
+      const times=slotTimesForDay(day);
+      const blocks=[];
+      let blockStart=null, blockEnd=null;
+
+      const flushBlock=()=>{
+        if(blockStart!==null){
+          blocks.push({start:blockStart, end:blockEnd});
+        }
+        blockStart=null;
+        blockEnd=null;
+      };
+
+      times.forEach(time=>{
+        const slot=getSlot(day,time);
+        const assigned=slot && analysisSlotHasTutorWork(slot, tutor.id);
+        if(assigned){
+          if(blockStart===null) blockStart=time;
+          blockEnd=time;
+        } else {
+          flushBlock();
+        }
+      });
+      flushBlock();
+
+      for(let i=1;i<blocks.length;i++){
+        const prev=blocks[i-1];
+        const next=blocks[i];
+        const prevEndIndex=times.indexOf(prev.end) + 1;
+        const nextStartIndex=times.indexOf(next.start);
+        const gapSlots=Math.max(0, nextStartIndex - prevEndIndex);
+        const gapHours=gapSlots * 0.5;
+        if(gapHours >= 1){
+          const prevEndTime = times[prevEndIndex] || 'end';
+          splitShiftGaps.push({
+            tutor,
+            day,
+            gapHours,
+            from: prevEndTime,
+            to: next.start,
+            prevStart: prev.start,
+            prevEnd: prevEndTime,
+            nextStart: next.start
+          });
+        }
+      }
+    });
+  });
+  splitShiftGaps.sort((a,b)=>b.gapHours-a.gapHours);
+
+
   // Concrete gap suggestions: only true open slots are suggested.
   // Slots already occupied by CET/SG are not treated as empty tutoring gaps.
   const gapSuggestions=[];
@@ -457,6 +513,12 @@ function runAIOptimize(){
   } else {
     textLines.push('• No very long continuous work blocks detected.');
   }
+  if(splitShiftGaps.length){
+    textLines.push('• Split-shift gaps to review:');
+    splitShiftGaps.slice(0,8).forEach(g=>textLines.push(`  - ${g.tutor.name} on ${g.day}: ${fmtTime(g.from)}–${fmtTime(g.to)} empty gap (${g.gapHours.toFixed(1)}h) between work blocks.`));
+  } else {
+    textLines.push('• No major same-day split-shift gaps detected.');
+  }
   textLines.push('');
 
   const nextSteps=[];
@@ -468,6 +530,7 @@ function runAIOptimize(){
     nextSteps.push(`Try one balancing move: consider using ${m.add.name} at ${slotLabel(m.slot)} instead of relying heavily on ${m.reduce.name}.`);
   }
   if(longRuns.length) nextSteps.push('Check long continuous work blocks and decide whether those tutors need a break.');
+  if(splitShiftGaps.length) nextSteps.push('Review split-shift gaps. The v2.1 generator tries to reduce these, but manual edits may still improve individual tutor comfort.');
   nextSteps.push('After manual edits, click Re-analyze schedule to re-check balance, CET, SG, and coverage.');
 
   textLines.push('6) Suggested next steps');
@@ -499,9 +562,15 @@ function runAIOptimize(){
     ${maxedGaps.length ? `<p><strong>Available tutors exist but are already at/near requested hours:</strong></p><ul class="analysis-list compact">${maxedGaps.map(g=>`<li>${esc(slotLabel(g.slot))}: ${g.best.map(t=>esc(t.name)).join(', ')}</li>`).join('')}</ul>` : ''}
   ` : `<div class="analysis-empty">No truly open slots. Use the thin regular tutoring list only if stronger backup coverage is needed.</div>`;
 
-  const workloadHTML = longRuns.length
+  const longRunHTML = longRuns.length
     ? `<ul class="analysis-list">${longRuns.slice(0,6).map(r=>`<li><strong>${esc(r.tutor.name)}</strong> has a long continuous work block on ${r.day}: ${fmtTime(r.start)}–${r.end==='end'?'end':fmtTime(r.end)} (${r.hours.toFixed(1)}h). This includes regular tutoring, CET, and SG blocks. Consider a break or split if needed.</li>`).join('')}</ul>`
     : `<div class="analysis-empty">No very long continuous work blocks detected.</div>`;
+
+  const splitShiftHTML = splitShiftGaps.length
+    ? `<div class="analysis-note"><strong>Split-shift gaps to review:</strong></div><ul class="analysis-list">${splitShiftGaps.slice(0,8).map(g=>`<li><strong>${esc(g.tutor.name)}</strong> on ${g.day}: ${fmtTime(g.from)}–${fmtTime(g.to)} empty gap (${g.gapHours.toFixed(1)}h) between work blocks.</li>`).join('')}</ul>`
+    : `<div class="analysis-empty">No major same-day split-shift gaps detected.</div>`;
+
+  const workloadHTML = longRunHTML + splitShiftHTML;
 
   const htmlReport=`
     <div class="quality-score-card">
