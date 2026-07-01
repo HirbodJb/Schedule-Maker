@@ -1,176 +1,332 @@
 # CAS ESL Schedule Builder
 
-A professional scheduling and roster management application designed for the Center for Academic Success (CAS) ESL tutoring program at Pierce College.
+A professional scheduling application developed for the **Center for Academic Success (CAS)** at **Los Angeles Pierce College** to automate and simplify ESL tutor scheduling.
 
-Originally designed and developed by **Hirbod Jabbarnezhad** to simplify tutor scheduling, availability management, roster organization, and weekly schedule generation for ESL tutoring operations.
+The application generates optimized weekly tutoring schedules, manages Course Embedded Tutor (CET) assignments, automatically places Study Groups, balances tutor workloads, and provides coordinators with powerful scheduling and roster management tools.
 
----
-
-## Overview
-
-CAS ESL Schedule Builder helps coordinators efficiently:
-
-- Import tutor availability from Google Forms CSV exports
-- Manage tutor rosters
-- Generate weekly tutoring schedules
-- Track tutor hours and scheduling balance
-- Identify uncovered scheduling gaps
-- Export schedules as PDF and Excel files
-- Save and reload full scheduling projects
-
-The application was built specifically around real CAS ESL scheduling workflows and institutional needs.
+> **Designed and developed by Hirbod Jabbarnezhad**
 
 ---
 
-## Features
+## Live Demo
 
-### Roster Management
-- Import tutor data from CSV
-- Add tutors manually
-- Store:
-  - Names
-  - Emails
-  - Phone numbers
-  - Availability
-  - Scheduling preferences
-  - Work-hour limits
-- Search and filter tutors instantly
+**Application**
+https://cas-esl-schedule-builder.netlify.app/
 
-### Smart Schedule Generation
-- Automatically generates tutoring schedules
-- Balances tutor hours
-- Supports:
-  - In-person tutors
-  - Online tutors
-  - Hybrid tutors
-- Detects uncovered time slots
-- Displays scheduling analytics and summaries
+**GitHub Repository**
+https://github.com/HirbodJb/Schedule-Maker
 
-### Interactive Schedule Editing
-- Move shifts manually
-- Undo functionality
-- Tutor focus mode
-- Search within generated schedules
-
-### Export System
-- Export schedules as:
-  - PDF
-  - Excel
-- Save full projects as JSON
-- Embedded authorship metadata in exports
-
-### User Experience
-- Modern responsive interface
-- Custom UI/UX design
-- Toast notifications
-- Search navigation
-- About/Credits modal
-- Institutional branding support
+Current Version: **v2.1**
 
 ---
 
-## Technologies Used
+# Project Overview
+
+The CAS ESL tutoring program schedules dozens of tutors every semester across multiple classes, tutoring modalities, Course Embedded Tutor (CET) assignments, and Study Groups.
+
+Originally, this scheduling process was performed manually, requiring hours of coordinator work each semester.
+
+CAS ESL Schedule Builder was developed to automate this workflow while still giving coordinators full manual control whenever adjustments are needed.
+
+The application is designed around real scheduling rules used by the Pierce College Center for Academic Success.
+
+---
+
+# Key Features
+
+## Smart Schedule Generation
+
+Automatically generates weekly tutoring schedules while considering:
+
+- Tutor availability
+- Weekly requested hours
+- In-person / Online preferences
+- Schedule fairness
+- Coverage optimization
+- Operating hour restrictions
+- Semester-specific rules
+
+---
+
+## Shift Compaction (v2.1)
+
+A custom scheduling optimization algorithm designed to reduce fragmented tutor schedules.
+
+Instead of assigning isolated half-hour blocks throughout the day, the scheduler prioritizes continuous work blocks whenever possible.
+
+Benefits include:
+
+- Fewer unnecessary campus gaps
+- Reduced split shifts
+- Better tutor experience
+- More realistic work schedules
+- Improved coordinator scheduling quality
+
+---
+
+## Course Embedded Tutor (CET) Management
+
+Complete support for Course Embedded Tutors.
+
+Features include:
+
+- Multiple tutors per class
+- Partial CET assignments
+- Day-specific tutor assignments
+- Saturday CET support
+- Availability-aware tutor selection
+- Automatic schedule integration
+- Conflict prevention
+- Visual CET blocks inside schedules
+
+---
+
+## Automatic Study Group Placement
+
+Automatically places Study Groups while respecting scheduling constraints.
+
+The scheduler:
+
+- Places Study Groups before or after classes
+- Never places a Study Group during class time
+- Supports asynchronous tutoring workflows
+- Allows manual adjustment when desired
+
+---
+
+## Semester Support
+
+Supports multiple scheduling policies.
+
+### Fall / Spring
+
+- Monday–Thursday: 9:00 AM – 5:00 PM
+- Friday: 10:00 AM – 2:00 PM
+
+### Summer / Winter
+
+- Monday–Thursday: 11:00 AM – 4:00 PM
+- Friday closed automatically
+
+---
+
+## Tutor Roster Management
+
+Manage tutor information including:
+
+- CSV import from Google Forms
+- Manual tutor creation
+- Availability editor
+- Weekly requested hours
+- Scheduling preferences
+- Contact information
+- Search and filtering
+
+---
+
+## Interactive Schedule Editing
+
+After generation, coordinators can:
+
+- Manually move tutoring assignments
+- Add additional tutoring blocks
+- Undo regenerated schedules
+- Search tutors instantly
+- Highlight tutor schedules
+- View uncovered time slots
+
+---
+
+## Analytics & Schedule Summary
+
+Provides scheduling insights including:
+
+- Tutor hour summaries
+- Remaining available hours
+- Uncovered tutoring slots
+- Schedule quality overview
+- Coverage statistics
+
+---
+
+## Export & Project Management
+
+Supports exporting and saving schedules as:
+
+- PDF
+- Excel
+- JSON project files
+
+Projects can be saved and reopened at any time.
+
+---
+
+# Engineering Challenges Solved
+
+This project required solving several real-world scheduling problems, including:
+
+- Automatic schedule generation
+- Fair tutor workload balancing
+- Shift compaction to reduce fragmented schedules
+- Course Embedded Tutor scheduling
+- Automatic Study Group placement
+- Semester-specific scheduling rules
+- Availability matching
+- Saturday scheduling support
+- Conflict detection
+- Interactive manual editing
+- Coverage optimization
+
+The scheduling engine has been continuously refined through multiple versions based on real coordinator feedback.
+
+---
+
+# Technologies Used
+
+### Frontend
 
 - HTML5
 - CSS3
 - Vanilla JavaScript
+
+### Scheduling Engine
+
+- Custom scheduling algorithm
+- Availability matching
+- Shift compaction optimization
+- Conflict detection
+- Constraint-based scheduling
+
+### Export System
+
 - jsPDF
+- XLSX
+- JSON serialization
+
+### Deployment
+
 - GitHub
+- Netlify
 
 ---
 
-## Original Author
+# Screenshots
 
-Originally designed and developed by:
+## Schedule Generation
 
-### Hirbod Jabbarnezhad
+*(Insert screenshot)*
 
-This software was created for the Pierce College Center for Academic Success (CAS) ESL scheduling workflow.
+## Course Embedded Tutor Management
 
-All major architecture, scheduling systems, UI/UX design, export systems, and roster management functionality were independently developed by the original author.
+*(Insert screenshot)*
 
----
+## Weekly Schedule
 
-## Project Goals
+*(Insert screenshot)*
 
-The primary goals of this project were:
+## Analytics
 
-- Reduce manual scheduling work
-- Improve scheduling consistency
-- Simplify roster management
-- Provide faster schedule generation
-- Improve schedule visualization
-- Create a maintainable scheduling workflow for CAS ESL operations
+*(Insert screenshot)*
 
 ---
 
-## Export Metadata & Authorship Protection
+# Version History
 
-The application includes embedded metadata and attribution systems inside exported files and project saves.
+## v2.1
 
-Exported files may contain metadata such as:
+### Scheduling Improvements
 
-```json
-{
-  "createdBy": "Hirbod Jabbarnezhad",
-  "software": "CAS ESL Schedule Builder",
-  "version": "1.0"
-}
-```
+- Introduced Shift Compaction algorithm
+- Reduced fragmented tutor schedules
+- Improved workload continuity
+- Smarter tutor assignment selection
 
-This helps preserve authorship and software origin information across exported project files.
+### Study Groups
+
+- Improved automatic Study Group placement
+- Prevented placement during active class sessions
+- Improved scheduling validation
+
+### General
+
+- Better schedule quality
+- Additional optimization improvements
+- Bug fixes and performance improvements
 
 ---
 
-## License
+## v2.0
+
+Major feature release introducing:
+
+- Complete Course Embedded Tutor system
+- Automatic Study Group generation
+- Asynchronous tutoring support
+- CET visualization inside schedules
+- Semester-specific scheduling
+- Focus mode
+- Availability-aware CET assignment
+- Summer/Winter scheduling support
+- Improved UI and workflow
+
+---
+
+## v1.0
+
+Initial release featuring:
+
+- Tutor roster management
+- CSV import
+- Automatic schedule generation
+- Schedule editing
+- PDF / Excel export
+- Project save & load
+
+---
+
+# Why I Built This
+
+As a Computer Science student and Course Embedded Tutor at Pierce College, I saw firsthand how much time coordinators spent manually creating tutoring schedules every semester.
+
+This project began as a way to automate that process but evolved into a full scheduling platform capable of handling real operational constraints, improving schedule quality, and simplifying coordinator workflows.
+
+Throughout development, the application has continuously evolved based on real usage, coordinator feedback, and additional scheduling requirements.
+
+---
+
+# Future Improvements
+
+Potential future additions include:
+
+- Multi-schedule support
+- Multiple campus support
+- Calendar integration
+- Cloud save system
+- Authentication
+- Database support
+- Advanced scheduling heuristics
+- AI-assisted schedule optimization
+- Mobile-friendly interface
+- Usage analytics dashboard
+
+---
+
+# Author
+
+**Hirbod Jabbarnezhad**
+
+Computer Science Student — California State University, Northridge
+
+GitHub:
+https://github.com/HirbodJb
+
+LinkedIn:
+www.linkedin.com/in/hirbod-jabbarnezhad-424678334
+
+---
+
+# License
 
 This project is licensed under the MIT License.
 
-Attribution to the original author must remain included in copies or substantial portions of the software.
-
----
-
-## Version History
-
-### v1.0
-- Initial public release
-- CSV import system
-- Tutor roster management
-- Automatic schedule generation
-- PDF/Excel export system
-- Project save/load support
-- Embedded metadata system
-- Interactive schedule editing tools
-
----
-
-## Repository Purpose
-
-This repository serves as:
-- The official development history
-- Proof of original authorship
-- Version tracking and software evolution
-- Public project documentation
-
-Git commit history and repository timestamps document the ongoing development of the software.
-
----
-
-## Future Improvements
-
-Potential future additions:
-- Multi-schedule support
-- Cloud save system
-- Authentication system
-- Advanced scheduling algorithms
-- Conflict detection improvements
-- Mobile optimization
-- Analytics dashboard
-- Database integration
-
----
-
-## Contact
-
-**Hirbod Jabbarnezhad**  
-GitHub: https://github.com/HirbodJb
+© 2026 Hirbod Jabbarnezhad
