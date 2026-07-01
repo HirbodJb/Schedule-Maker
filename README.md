@@ -214,19 +214,19 @@ The scheduling engine has been continuously refined through multiple versions ba
 
 ## Schedule Generation
 
-*(Insert screenshot)*
+![alt text](image.png)
 
 ## Course Embedded Tutor Management
 
-*(Insert screenshot)*
+![alt text](image-1.png)
 
 ## Weekly Schedule
 
-*(Insert screenshot)*
+![alt text](image-2.png)
 
 ## Analytics
 
-*(Insert screenshot)*
+![alt text](image-3.png)
 
 ---
 
