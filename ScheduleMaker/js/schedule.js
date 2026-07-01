@@ -3,11 +3,31 @@ function scheduleSlotKey(day, time){ return day + '-' + time; }
 function minsToScheduleTime(mins){ return `${Math.floor(mins/60)}:${mins%60===0?'00':String(mins%60).padStart(2,'0')}`; }
 function scheduleFindSlot(slots, day, time){ return slots.find(s => s.day === day && s.time === time); }
 function scheduleSlotHasTutor(slot, tutorId){ return !!(slot && slot.assigned && slot.assigned.some(x => String(x.id) === String(tutorId))); }
-function isStudyGroupBlockValid(tutor, day, startTime, slots){
+function studyGroupBlockOverlapsClassMeeting(cls, day, startTime){
+  // Study groups should never be placed during the class meeting itself.
+  // Important: use the full class meeting time, not only the tutor's assigned CET block.
+  // Example: class 9am–12pm, tutor attends 9am–10:30am → SG cannot be 10:30am–11:30am.
+  if(!cls || cls.modality === 'async') return false;
+  if(!Array.isArray(cls.days) || !cls.days.includes(day)) return false;
+  if(!cls.startTime || !cls.endTime) return false;
+
+  const sgStart = timeToMins(startTime);
+  const sgEnd = sgStart + 60;
+  const classStart = timeToMins(cls.startTime);
+  const classEnd = timeToMins(cls.endTime);
+
+  if(classEnd <= classStart) return false;
+  return sgStart < classEnd && sgEnd > classStart;
+}
+
+function isStudyGroupBlockValid(tutor, day, startTime, slots, cls=null){
   const times = timesForDay(day);
   const startMins = timeToMins(startTime);
   const blockTimes = [startTime, minsToScheduleTime(startMins + 30)];
+
   if(!blockTimes.every(t => times.includes(t))) return false;
+  if(studyGroupBlockOverlapsClassMeeting(cls, day, startTime)) return false;
+
   return blockTimes.every(t => {
     const key = scheduleSlotKey(day, t);
     const slot = scheduleFindSlot(slots, day, t);
@@ -41,7 +61,7 @@ function placeStudyGroupBlock(tutor, cls, assignment, day, startTime, slots, opt
   };
   assignment.sgNote = options.manual
     ? 'Study group manually selected for this asynchronous class.'
-    : 'Study group auto-placed next to class time.';
+    : 'Study group auto-placed before/after the full class meeting time.';
   tutor.assignedHrs = Number(tutor.assignedHrs || 0) + 1;
 }
 function autoPlaceCETStudyGroups(slots){
@@ -64,7 +84,7 @@ function autoPlaceCETStudyGroups(slots){
       // They use the manual SG day/time selected in the CET assignment modal.
       if(cls.modality === 'async'){
         const p = a.sgPlacement;
-        if(p && p.day && p.startTime && isStudyGroupBlockValid(tutor, p.day, p.startTime, slots)){
+        if(p && p.day && p.startTime && isStudyGroupBlockValid(tutor, p.day, p.startTime, slots, cls)){
           placeStudyGroupBlock(tutor, cls, a, p.day, p.startTime, slots, {manual:true});
         } else {
           a.sgStatus = 'manual-needed';
@@ -83,13 +103,21 @@ function autoPlaceCETStudyGroups(slots){
 
       const candidates = [];
       (a.days || []).forEach(day => {
-        const after = a.endTime;
-        const before = minsToScheduleTime(timeToMins(a.startTime) - 60);
-        candidates.push({day, startTime: after, priority: 'after'});
-        candidates.push({day, startTime: before, priority: 'before'});
+        // Use the full class meeting window for SG placement.
+        // The tutor may only attend part of the class, but students are still in class
+        // until cls.endTime, so the SG must be before cls.startTime or after cls.endTime.
+        const classStart = cls.startTime || a.startTime;
+        const classEnd = cls.endTime || a.endTime;
+
+        const after = classEnd;
+        const before = minsToScheduleTime(timeToMins(classStart) - 60);
+
+        // Prefer right after the full class, then right before the full class.
+        candidates.push({day, startTime: after, priority: 'after-full-class'});
+        candidates.push({day, startTime: before, priority: 'before-full-class'});
       });
 
-      const chosen = candidates.find(c => isStudyGroupBlockValid(tutor, c.day, c.startTime, slots));
+      const chosen = candidates.find(c => isStudyGroupBlockValid(tutor, c.day, c.startTime, slots, cls));
       if(chosen){
         placeStudyGroupBlock(tutor, cls, a, chosen.day, chosen.startTime, slots);
       } else {
@@ -1095,11 +1123,31 @@ function handleScheduleCellClickGuarded(day, time){
 //  manually selected on the CET assignment and then placed into the schedule.
 // ══════════════════════════════════════════════════════════════
 
-function isStudyGroupBlockValid(tutor, day, startTime, slots){
+function studyGroupBlockOverlapsClassMeeting(cls, day, startTime){
+  // Study groups should never be placed during the class meeting itself.
+  // Important: use the full class meeting time, not only the tutor's assigned CET block.
+  // Example: class 9am–12pm, tutor attends 9am–10:30am → SG cannot be 10:30am–11:30am.
+  if(!cls || cls.modality === 'async') return false;
+  if(!Array.isArray(cls.days) || !cls.days.includes(day)) return false;
+  if(!cls.startTime || !cls.endTime) return false;
+
+  const sgStart = timeToMins(startTime);
+  const sgEnd = sgStart + 60;
+  const classStart = timeToMins(cls.startTime);
+  const classEnd = timeToMins(cls.endTime);
+
+  if(classEnd <= classStart) return false;
+  return sgStart < classEnd && sgEnd > classStart;
+}
+
+function isStudyGroupBlockValid(tutor, day, startTime, slots, cls=null){
   const times = timesForDay(day);
   const startMins = timeToMins(startTime);
   const blockTimes = [startTime, minsToScheduleTime(startMins + 30)];
+
   if(!blockTimes.every(t => times.includes(t))) return false;
+  if(studyGroupBlockOverlapsClassMeeting(cls, day, startTime)) return false;
+
   return blockTimes.every(t => {
     const key = scheduleSlotKey(day, t);
     const slot = scheduleFindSlot(slots, day, t);
@@ -1130,7 +1178,7 @@ function placeStudyGroupBlock(tutor, cls, assignment, day, startTime, slots, isM
     weeklyHours: 1,
     manual: !!isManual
   };
-  assignment.sgNote = isManual ? 'Study group manually selected for this asynchronous class.' : 'Study group auto-placed next to class time.';
+  assignment.sgNote = isManual ? 'Study group manually selected for this asynchronous class.' : 'Study group auto-placed before/after the full class meeting time.';
   tutor.assignedHrs = Number(tutor.assignedHrs || 0) + 1;
 }
 
@@ -1176,13 +1224,21 @@ function autoPlaceCETStudyGroups(slots){
 
       const candidates = [];
       (a.days || []).forEach(day => {
-        const after = a.endTime;
-        const before = minsToScheduleTime(timeToMins(a.startTime) - 60);
-        candidates.push({day, startTime: after, priority: 'after'});
-        candidates.push({day, startTime: before, priority: 'before'});
+        // Use the full class meeting window for SG placement.
+        // The tutor may only attend part of the class, but students are still in class
+        // until cls.endTime, so the SG must be before cls.startTime or after cls.endTime.
+        const classStart = cls.startTime || a.startTime;
+        const classEnd = cls.endTime || a.endTime;
+
+        const after = classEnd;
+        const before = minsToScheduleTime(timeToMins(classStart) - 60);
+
+        // Prefer right after the full class, then right before the full class.
+        candidates.push({day, startTime: after, priority: 'after-full-class'});
+        candidates.push({day, startTime: before, priority: 'before-full-class'});
       });
 
-      const chosen = candidates.find(c => isStudyGroupBlockValid(tutor, c.day, c.startTime, slots));
+      const chosen = candidates.find(c => isStudyGroupBlockValid(tutor, c.day, c.startTime, slots, cls));
       if(chosen){
         placeStudyGroupBlock(tutor, cls, a, chosen.day, chosen.startTime, slots, false);
       } else {
@@ -1271,7 +1327,7 @@ function placeStudyGroupBlock(tutor, cls, assignment, day, startTime, slots, isM
     weeklyHours: 1,
     manual: !!isManual
   };
-  assignment.sgNote = isManual ? 'Study group manually selected for this asynchronous class.' : 'Study group auto-placed next to class time.';
+  assignment.sgNote = isManual ? 'Study group manually selected for this asynchronous class.' : 'Study group auto-placed before/after the full class meeting time.';
   tutor.assignedHrs = Number(tutor.assignedHrs || 0) + 1;
 }
 
