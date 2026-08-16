@@ -5,8 +5,8 @@
   --cream:#faf6f3;--paper:#ffffff;--soft:#f3ece8;
   --ok-bg:#edf7ee;--ok:#236b35;--ok-b:#b8dfc0;
   --warn-bg:#fff8ec;--warn:#7a5000;--warn-b:#f5d48a;
-  --font:'DM Sans',ui-sans-serif,system-ui,sans-serif;
-  --mono:'DM Mono',ui-monospace,monospace;
+  --font:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:ui-monospace,"Cascadia Code","Segoe UI Mono",Consolas,monospace;
   --r:14px;--r-lg:20px;--shadow:0 8px 32px rgba(30,22,20,.09);
 }
 body{font-family:var(--font);font-size:14px;color:var(--ink);background:var(--cream);line-height:1.5;min-height:100vh}

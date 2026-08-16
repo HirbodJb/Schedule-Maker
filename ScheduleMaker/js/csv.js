@@ -2,6 +2,7 @@
 function handleCSV(input){
   const file = input.files[0];
   if(!file) return;
+  if(!localFileIsAllowed(file,'CSV file')){ input.value=''; return; }
   const reader = new FileReader();
   reader.onload = e => parseCSVText(e.target.result);
   reader.readAsText(file);
@@ -144,8 +145,8 @@ function parseManualCSVRow(vals, headers, hasHeader){
     headers.forEach((h,idx)=>row[h]=vals[idx]||'');
   }
 
-  const name = firstCSVValue(row, ['name','full name','tutor name'], 0);
-  const email = firstCSVValue(row, ['email','laccd email','student email','work email'], 1);
+  const name = cleanPlainText(firstCSVValue(row, ['name','full name','tutor name'], 0), 120);
+  const email = cleanPlainText(firstCSVValue(row, ['email','laccd email','student email','work email'], 1), 254);
 
   let phone = firstCSVValue(row, ['phone','phone number','cell','cell phone','mobile'], null);
   let hrsRaw = firstCSVValue(row, ['hours','desired hours','hrs','desired hrs','desired hrs / week','desired hours per week'], null);
@@ -234,10 +235,14 @@ function parseManualCSVRow(vals, headers, hasHeader){
   const priority = String(priorityRaw || 'agree').toLowerCase().includes('disagree') ? 'disagree' : 'agree';
   const other = parseInt(otherRaw || '0') || 0;
 
-  return {name,email,phone,hrs,other,mode,sat,stable,eng101,priority,av};
+  return {name,email,phone:cleanPlainText(phone,40),hrs,other,mode,sat,stable,eng101,priority,av};
 }
 
 function parseCSVText(text){
+  if(typeof text !== 'string' || new Blob([text]).size > MAX_LOCAL_FILE_BYTES){
+    showStatus('import-status','The pasted CSV is too large. The local safety limit is 5 MB.','err');
+    return;
+  }
   const lines = text.trim().split(/\r?\n/).filter(l=>l.trim());
 
   if(lines.length < 1){
@@ -312,7 +317,7 @@ DZ.addEventListener('dragleave', ()=> DZ.classList.remove('drag'));
 DZ.addEventListener('drop', e=>{
   e.preventDefault(); DZ.classList.remove('drag');
   const f = e.dataTransfer.files[0];
-  if(f){ const r=new FileReader(); r.onload=ev=>parseCSVText(ev.target.result); r.readAsText(f); }
+  if(f && localFileIsAllowed(f,'CSV file')){ const r=new FileReader(); r.onload=ev=>parseCSVText(ev.target.result); r.readAsText(f); }
 });
 
 // ── Schedule generation ───────────────────────────────────

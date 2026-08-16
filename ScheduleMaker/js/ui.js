@@ -2,9 +2,22 @@
 function showToast(msg, type='err', duration=4500){
   const c=document.getElementById('toast-container');
   const t=document.createElement('div');
-  t.className='toast '+type;
-  const icon=type==='err'?'ti-circle-x':type==='warn'?'ti-alert-triangle':'ti-circle-check';
-  t.innerHTML=`<i class="ti ${icon} toast-icon" aria-hidden="true"></i><div class="toast-body">${msg}</div><button class="toast-close" onclick="dismissToast(this.parentElement)" aria-label="Close">&times;</button>`;
+  const safeType=['err','warn','ok'].includes(type) ? type : 'err';
+  t.className='toast '+safeType;
+  const icon=safeType==='err'?'ti-circle-x':safeType==='warn'?'ti-alert-triangle':'ti-circle-check';
+  const iconEl=document.createElement('i');
+  iconEl.className=`ti ${icon} toast-icon`;
+  iconEl.setAttribute('aria-hidden','true');
+  const body=document.createElement('div');
+  body.className='toast-body';
+  setSafeRichText(body,msg);
+  const close=document.createElement('button');
+  close.className='toast-close';
+  close.type='button';
+  close.setAttribute('aria-label','Close');
+  close.textContent='×';
+  close.addEventListener('click',()=>dismissToast(t));
+  t.append(iconEl,body,close);
   c.appendChild(t);
   const timer=setTimeout(()=>dismissToast(t), duration);
   t._timer=timer;
@@ -23,17 +36,30 @@ function showConfirm(title, msg, onConfirm, confirmLabel='Delete', confirmClass=
   if(old) old.remove();
   const ov=document.createElement('div');
   ov.id='confirm-overlay';
-  ov.innerHTML=`<div class="confirm-box">
-    <h4>${title}</h4>
-    <p>${msg}</p>
-    <div class="confirm-actions">
-      <button class="btn btn-sm" onclick="document.getElementById('confirm-overlay').remove()">Cancel</button>
-      <button class="btn btn-sm ${confirmClass}" id="confirm-ok-btn">${confirmLabel}</button>
-    </div>
-  </div>`;
+  const box=document.createElement('div');
+  box.className='confirm-box';
+  const heading=document.createElement('h4');
+  heading.textContent=cleanPlainText(title,120);
+  const message=document.createElement('p');
+  setSafeRichText(message,msg);
+  const actions=document.createElement('div');
+  actions.className='confirm-actions';
+  const cancel=document.createElement('button');
+  cancel.className='btn btn-sm';
+  cancel.type='button';
+  cancel.textContent='Cancel';
+  const ok=document.createElement('button');
+  ok.className=`btn btn-sm ${['btn-danger','btn-red'].includes(confirmClass)?confirmClass:'btn-danger'}`;
+  ok.id='confirm-ok-btn';
+  ok.type='button';
+  ok.textContent=cleanPlainText(confirmLabel,60);
+  actions.append(cancel,ok);
+  box.append(heading,message,actions);
+  ov.appendChild(box);
   document.body.appendChild(ov);
   ov.addEventListener('click', e=>{ if(e.target===ov) ov.remove(); });
-  document.getElementById('confirm-ok-btn').addEventListener('click', ()=>{ ov.remove(); onConfirm(); });
+  cancel.addEventListener('click',()=>ov.remove());
+  ok.addEventListener('click', ()=>{ ov.remove(); onConfirm(); });
 }
 
 // ── About Modal & Keyboard ──────────────────────────────
@@ -156,8 +182,16 @@ function scrollActivePaneToTop(){
 function showStatus(containerId, msg, type){
   const el = document.getElementById(containerId);
   if(!el) return;
-  if(!msg){ el.innerHTML=''; return; }
-  el.innerHTML = `<div class="status-box ${type}"><i class="ti ti-${type==='ok'?'check':'alert-circle'}"></i> ${msg}</div>`;
+  if(!msg){ el.replaceChildren(); return; }
+  const safeType=['ok','err','warn'].includes(type) ? type : 'err';
+  const box=document.createElement('div');
+  box.className=`status-box ${safeType}`;
+  const icon=document.createElement('i');
+  icon.className=`ti ti-${safeType==='ok'?'check':'alert-circle'}`;
+  const text=document.createElement('span');
+  text.textContent=String(msg);
+  box.append(icon,text);
+  el.replaceChildren(box);
 }
 
 // ── Status helper ────────────────────────────────────────

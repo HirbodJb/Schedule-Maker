@@ -265,7 +265,7 @@ function renderCET(){
       html += `<div class="cet-tutor-row ${isFocused?'cet-tutor-focused':''}"
         onclick="toggleCETFocus(${t.id})"
         style="--tc:${c.text};--tbg:${c.bg};--tb:${c.border}">
-        <div class="h-av" style="background:${c.bg};color:${c.text};width:32px;height:32px;font-size:11px">${initials(t.name)}</div>
+        <div class="h-av" style="background:${c.bg};color:${c.text};width:32px;height:32px;font-size:11px">${cetEsc(initials(t.name))}</div>
         <div style="flex:1;min-width:0">
           <div class="h-name" style="font-size:12px">${t.name}</div>
           <div style="font-size:10px;color:var(--muted);margin-top:2px">
@@ -374,7 +374,7 @@ function renderClassCard(cls){
   } else if(assigned){
     html += `
       <div class="cet-assigned-pill" style="background:${c.bg};color:${c.text};border:1.5px solid ${c.border}">
-        <div class="avatar" style="background:${c.bg};color:${c.text};width:22px;height:22px;font-size:9px;flex-shrink:0">${initials(assigned.name)}</div>
+        <div class="avatar" style="background:${c.bg};color:${c.text};width:22px;height:22px;font-size:9px;flex-shrink:0">${cetEsc(initials(assigned.name))}</div>
         ${assigned.name}
         <span class="cet-assigned-hrs">${cls.hrsPerWeek}h/wk</span>
       </div>
@@ -1182,7 +1182,7 @@ function renderCET(){
       const assignedCount = getCETAssignmentsForTutor(t.id).length;
       const unresolvedSGCount = getCETAssignmentsForTutor(t.id).filter(x => assignmentNeedsStudyGroup(x.cls, x.assignment) && x.assignment.sgStatus !== 'scheduled').length;
       html += `<div class="cet-tutor-row ${isFocused?'cet-tutor-focused':''}" onclick="toggleCETFocus(${t.id})" style="--tc:${c.text};--tbg:${c.bg};--tb:${c.border}">
-        <div class="h-av" style="background:${c.bg};color:${c.text};width:32px;height:32px;font-size:11px">${initials(t.name)}</div>
+        <div class="h-av" style="background:${c.bg};color:${c.text};width:32px;height:32px;font-size:11px">${cetEsc(initials(t.name))}</div>
         <div style="flex:1;min-width:0">
           <div class="h-name" style="font-size:12px">${cetEsc(t.name)}</div>
           <div style="font-size:10px;color:var(--muted);margin-top:2px">
@@ -1252,7 +1252,7 @@ function renderClassCard(cls){
         if(!tutor) return;
         const c = cetColorFor(tutor.id);
         html += `<div class="cet-assignment-pill" style="background:${c.bg};color:${c.text};border:1.5px solid ${c.border}">
-          <div class="avatar" style="background:${c.bg};color:${c.text};width:22px;height:22px;font-size:9px;flex-shrink:0">${initials(tutor.name)}</div>
+          <div class="avatar" style="background:${c.bg};color:${c.text};width:22px;height:22px;font-size:9px;flex-shrink:0">${cetEsc(initials(tutor.name))}</div>
           <div class="cet-assignment-info"><strong>${cetEsc(tutor.name)}</strong><span>${cetAssignmentTimeLabel(a)} · ${formatCETHours(a.weeklyHours)}/wk</span>${assignmentNeedsStudyGroup(cls,a) ? (isCETStudyGroupResolved(cls,a) && a.sgPlacement ? `<span class="cet-sg-ok">✓ SG placed ${a.sgPlacement.day.slice(0,3)} · ${fmtTime(a.sgPlacement.startTime)}–${fmtTime(a.sgPlacement.endTime)} · change manually if needed</span>` : `<span class="cet-sg-warning">⚠ SG needs manual time</span>`) : ''}</div>
           <button class="cet-pill-remove" onclick="removeCETAssignment(${cls.id}, ${a.id})" title="Remove this tutor"><i class="ti ti-x"></i></button>
         </div>`;
@@ -1764,6 +1764,19 @@ function normalizeCETClass(cls){
     cls.endTime = '';
   }
 
+  cls.id = safeRecordId(cls.id, Date.now() + Math.random());
+  cls.title = cleanPlainText(cls.title, 120);
+  cls.professor = cleanPlainText(cls.professor, 120);
+  cls.semester = cleanPlainText(cls.semester, 80);
+  cls.modality = ['in-person','online-live','async'].includes(cls.modality) ? cls.modality : 'in-person';
+  cls.days = Array.isArray(cls.days) ? cls.days.filter(day => ALL_DAYS.includes(day)).slice(0, ALL_DAYS.length) : [];
+  cls.startTime = /^\d{1,2}:\d{2}$/.test(String(cls.startTime || '')) ? String(cls.startTime) : '';
+  cls.endTime = /^\d{1,2}:\d{2}$/.test(String(cls.endTime || '')) ? String(cls.endTime) : '';
+  cls.hrsPerWeek = safeFiniteNumber(cls.hrsPerWeek, 0, 0, 168);
+  cls.studyGroupMode = cleanPlainText(cls.studyGroupMode, 40);
+  cls.wantsCET = cls.wantsCET !== false;
+  cls.requiresStudyGroup = cls.requiresStudyGroup !== false;
+
   if(cls.assignedTutorId && !cls.assignments.some(a => String(a.tutorId) === String(cls.assignedTutorId))){
     cls.assignments.push({
       id: Date.now() + Math.random(),
@@ -1780,20 +1793,27 @@ function normalizeCETClass(cls){
 
   cls.assignments = cls.assignments.map(a => {
     const isAsync = cls.modality === 'async';
-    const sgPlacement = a.sgPlacement || null;
+    const rawPlacement = a.sgPlacement && typeof a.sgPlacement === 'object' ? a.sgPlacement : null;
+    const sgPlacement = rawPlacement && ALL_DAYS.includes(rawPlacement.day)
+      ? {
+          day:rawPlacement.day,
+          startTime:/^\d{1,2}:\d{2}$/.test(String(rawPlacement.startTime || '')) ? String(rawPlacement.startTime) : '',
+          endTime:/^\d{1,2}:\d{2}$/.test(String(rawPlacement.endTime || '')) ? String(rawPlacement.endTime) : ''
+        }
+      : null;
     const requiresSG = cls.requiresStudyGroup !== false;
     return {
-      id: a.id || Date.now() + Math.random(),
+      id: safeRecordId(a.id, Date.now() + Math.random()),
       tutorId: Number(a.tutorId),
       days: isAsync ? [] : (Array.isArray(a.days) ? a.days : []),
       startTime: isAsync ? '' : (a.startTime || cls.startTime || ''),
       endTime: isAsync ? '' : (a.endTime || cls.endTime || ''),
       weeklyHours: isAsync ? Number(a.weeklyHours ?? classContactHours(cls) ?? 0) : Number(a.weeklyHours ?? calcCETAssignmentHours(a) ?? 0),
       asyncCoursework: isAsync || !!a.asyncCoursework,
-      note: a.note || '',
+      note: cleanPlainText(a.note, 500),
       sgStatus: requiresSG ? (sgPlacement ? 'scheduled' : (a.sgStatus || (isAsync ? 'manual-needed' : 'pending'))) : 'not-needed',
       sgPlacement,
-      sgNote: a.sgNote || (requiresSG ? (isAsync ? 'Asynchronous class: SG must be manually selected.' : '') : '')
+      sgNote: cleanPlainText(a.sgNote || (requiresSG ? (isAsync ? 'Asynchronous class: SG must be manually selected.' : '') : ''), 500)
     };
   }).filter(a => a.tutorId && (cls.modality === 'async' ? (a.weeklyHours >= 0) : (a.days.length && a.weeklyHours > 0)));
 

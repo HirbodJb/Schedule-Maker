@@ -27,15 +27,15 @@ function renderTutors(){
     const ribbonColor = t.manual ? 'var(--red)' : c.text;
     const stableColor = t.stable==='stable'?'var(--ok)':t.stable==='maybe'?'var(--warn)':'var(--red)';
     const stableLabel = t.stable==='stable'?'Stable':t.stable==='maybe'?'May change':'Tentative';
-    const phoneStr = t.phone ? ` · ${t.phone}` : '';
+    const phoneStr = t.phone ? ` · ${escapeHtml(t.phone)}` : '';
     const eng101Str = t.eng101 ? ` · ENG101: ${t.eng101==='yes'?'✓':'Not yet'}` : '';
     const priorityStr = t.priority==='disagree'?' · <span style="color:var(--red)">⚠ Disagrees w/ priority policy</span>':'';
     const searchKey = escapeHtml([t.name,t.email,t.phone,(t.phone||'').replace(/\D/g,''),t.eng101,t.mode,t.stable].filter(Boolean).join(' ').toLowerCase());
     return `<div class="tc" id="tutor-card-${t.id}" data-search="${searchKey}" style="--tc-bg:${c.bg};--tc-border:${c.border};--tc-text:${c.text}">
       <div class="tc-ribbon" style="background:${ribbonColor}"></div>
-      <div class="avatar" style="background:${c.bg};color:${c.text}">${initials(t.name)}</div>
+      <div class="avatar" style="background:${c.bg};color:${c.text}">${escapeHtml(initials(t.name))}</div>
       <div class="tc-info">
-        <div class="tc-name">${t.name}${t.email?`<span style="font-size:11px;font-weight:400;color:var(--muted)">${t.email}</span>`:''}${sourceTag}</div>
+        <div class="tc-name">${escapeHtml(t.name)}${t.email?`<span style="font-size:11px;font-weight:400;color:var(--muted)">${escapeHtml(t.email)}</span>`:''}${sourceTag}</div>
         <div class="tc-meta">${t.hrs} hrs/wk · ${avCount} slots available · ${modeTag}${satTag} <span style="color:${stableColor};font-weight:700">${stableLabel}</span>${phoneStr}${eng101Str}${priorityStr}</div>
       </div>
       <div class="tc-actions">
@@ -384,15 +384,15 @@ function saveTutorEdit(id){
   const tutor = getTutorById(id);
   if(!tutor) return;
 
-  const name = document.getElementById('edit-name').value.trim();
+  const name = cleanPlainText(document.getElementById('edit-name').value,120);
   if(!name){ showToast('Please enter the tutor\'s full name.'); document.getElementById('edit-name').focus(); return; }
 
-  const email = document.getElementById('edit-email').value.trim();
+  const email = cleanPlainText(document.getElementById('edit-email').value,254);
   if(!email){ showToast('A LACCD email address is required.'); document.getElementById('edit-email').focus(); return; }
   const emailRx = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   if(!emailRx.test(email)){ showToast('Please enter a valid email address (e.g. name@laccd.edu).'); document.getElementById('edit-email').focus(); return; }
 
-  const phone = document.getElementById('edit-phone').value.trim();
+  const phone = cleanPlainText(document.getElementById('edit-phone').value,40);
   if(!phone){ showToast('A phone number is required so Jamie can reach this tutor if needed.'); document.getElementById('edit-phone').focus(); return; }
 
   if(tutors.some(t => String(t.id)!==String(id) && t.email && t.email.toLowerCase()===email.toLowerCase())){

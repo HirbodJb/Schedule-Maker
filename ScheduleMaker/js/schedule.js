@@ -802,7 +802,7 @@ function renderOutput(slots){
           const clickHandler = isCETDisplay
             ? `event.stopPropagation()`
             : `openShiftPopover(event,${tt.id},'${day}','${t}')`;
-          pills+=`<span class="pill${isSG?' sg-pill':''}${isCETDisplay?' cet-display-pill':''}${editClass}${focusClass}" onmouseenter="${hoverHandler}" onmousemove="moveTutorQuickSummary(event)" onmouseleave="hideTutorQuickSummary()" onclick="${clickHandler}" style="background:${isSG?'#eaf3de':isCETDisplay?'#fff3df':c.bg};color:${isSG?'#27500a':isCETDisplay?'#7a4200':c.text};border:1px dashed ${isSG?'#8bc46b':isCETDisplay?'#e0a341':c.border};opacity:.78;font-size:9px;">${isSG?'SG ':isCETDisplay?'CET ':''}${tt.name.split(' ')[0]} ···</span>`;
+          pills+=`<span class="pill${isSG?' sg-pill':''}${isCETDisplay?' cet-display-pill':''}${editClass}${focusClass}" onmouseenter="${hoverHandler}" onmousemove="moveTutorQuickSummary(event)" onmouseleave="hideTutorQuickSummary()" onclick="${clickHandler}" style="background:${isSG?'#eaf3de':isCETDisplay?'#fff3df':c.bg};color:${isSG?'#27500a':isCETDisplay?'#7a4200':c.text};border:1px dashed ${isSG?'#8bc46b':isCETDisplay?'#e0a341':c.border};opacity:.78;font-size:9px;">${isSG?'SG ':isCETDisplay?'CET ':''}${escapeHtml(tt.name.split(' ')[0])} ···</span>`;
           return;
         }
 
@@ -821,7 +821,7 @@ function renderOutput(slots){
         const clickHandler = isCETDisplay
           ? `event.stopPropagation()`
           : `openShiftPopover(event,${tt.id},'${day}','${t}')`;
-        pills+=`<span class="${pillClass}${editClass}${focusClass}" onmouseenter="${hoverHandler}" onmousemove="moveTutorQuickSummary(event)" onmouseleave="hideTutorQuickSummary()" onclick="${clickHandler}" style="background:${isSG?'#eaf3de':isCETDisplay?'#fff3df':c.bg};color:${isSG?'#27500a':isCETDisplay?'#7a4200':c.text};border:1.5px solid ${isSG?'#8bc46b':isCETDisplay?'#e0a341':c.border}">${labelText}${timeLabel}</span>`;
+        pills+=`<span class="${pillClass}${editClass}${focusClass}" onmouseenter="${hoverHandler}" onmousemove="moveTutorQuickSummary(event)" onmouseleave="hideTutorQuickSummary()" onclick="${clickHandler}" style="background:${isSG?'#eaf3de':isCETDisplay?'#fff3df':c.bg};color:${isSG?'#27500a':isCETDisplay?'#7a4200':c.text};border:1.5px solid ${isSG?'#8bc46b':isCETDisplay?'#e0a341':c.border}">${escapeHtml(labelText)}${timeLabel}</span>`;
       });
 
       html+=`<td class="${cellClass}" onclick="handleScheduleCellClickGuarded('${day}','${t}')">${pills}</td>`;
@@ -861,9 +861,9 @@ function renderOutput(slots){
     const cls=t.assignedHrs>t.hrs?'over':t.assignedHrs<t.hrs*0.5?'low':'';
     const focusRowClass=focusedTutorId?(String(focusedTutorId)===String(t.id)?' focus-active':' focus-muted'):'';
     html+=`<div class="h-row hours-tutor-row${focusRowClass}" id="hours-row-${t.id}" onclick="focusTutor(${t.id})" title="Focus ${escapeHtml(t.name)}'s schedule">
-      <div class="h-av" style="background:${c.bg};color:${c.text}">${initials(t.name)}</div>
+      <div class="h-av" style="background:${c.bg};color:${c.text}">${escapeHtml(initials(t.name))}</div>
       <div class="hours-tutor-info">
-        <div class="h-name">${t.name}</div>
+        <div class="h-name">${escapeHtml(t.name)}</div>
         <div class="hours-tutor-hours">${t.assignedHrs.toFixed(1)} / ${t.hrs}h</div>
       </div>
       <div class="hours-tutor-progress"><div class="h-bar-wrap"><div class="h-bar ${cls}" style="width:${pct}%"></div></div></div>

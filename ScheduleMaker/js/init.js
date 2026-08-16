@@ -22,3 +22,34 @@ applyScheduleSettingsToInputs();
 updateScrollTopButton('upload');
 updateUndoButton();
 
+// Keep sensitive roster data out of the browser's back-forward page cache.
+// The only durable copy is one the user explicitly downloads.
+window.addEventListener('pagehide', ()=>{
+  tutors=[];
+  avail={};
+  currentSlots=[];
+  cetClasses=[];
+  rosterSearchResults=[];
+  scheduleSearchResults=[];
+  rosterSearchQuery='';
+  scheduleSearchQuery='';
+  cetStudyGroupWarnings=[];
+  selectedShift=null;
+  moveMode=null;
+  addHoursMode=null;
+  focusedTutorId=null;
+  cetFocusedTutorId=null;
+  undoSnapshot=null;
+  currentAnalysisReportText='';
+  currentAnalysisReportHTML='';
+  document.querySelectorAll('input:not([type="button"]):not([type="submit"]), textarea').forEach(input=>{
+    if(input.type === 'file') input.value='';
+    else if(input.type === 'checkbox' || input.type === 'radio') input.checked=false;
+    else input.value='';
+  });
+  ['tutor-list','gen-out','pane-cet','toast-container'].forEach(id=>{
+    const element=document.getElementById(id);
+    if(element) element.replaceChildren();
+  });
+  document.querySelectorAll('[id$="-overlay"], .tutor-quick-summary, #shift-popover').forEach(element=>element.remove());
+});

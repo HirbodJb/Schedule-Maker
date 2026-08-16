@@ -1,14 +1,14 @@
 // ── Add Tutor Manually & Clear All ──────────────────────────
 function addTutor(){
-  const name = document.getElementById('t-name').value.trim();
+  const name = cleanPlainText(document.getElementById('t-name').value,120);
   if(!name){ showToast('Please enter the tutor\'s full name.'); document.getElementById('t-name').focus(); return; }
 
-  const email = document.getElementById('t-email').value.trim();
+  const email = cleanPlainText(document.getElementById('t-email').value,254);
   if(!email){ showToast('A LACCD email address is required.'); document.getElementById('t-email').focus(); return; }
   const emailRx = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   if(!emailRx.test(email)){ showToast('Please enter a valid email address (e.g. name@laccd.edu).'); document.getElementById('t-email').focus(); return; }
 
-  const phone = document.getElementById('t-phone').value.trim();
+  const phone = cleanPlainText(document.getElementById('t-phone').value,40);
 
   // ── Phone required ───────────────────────────────────────
   if(!phone){
@@ -19,13 +19,13 @@ function addTutor(){
 
   // ── Duplicate email check ────────────────────────────────
   if(email && tutors.some(t => t.email && t.email.toLowerCase()===email.toLowerCase())){
-    showToast(`A tutor with the email <strong>${email}</strong> is already in the roster. Please check for duplicates.`);
+    showToast(`A tutor with the email <strong>${escapeHtml(email)}</strong> is already in the roster. Please check for duplicates.`);
     return;
   }
 
   // ── Duplicate phone check ────────────────────────────────
   if(tutors.some(t => t.phone && t.phone.replace(/\D/g,'')===phone.replace(/\D/g,'') && phone.replace(/\D/g,'').length>=7)){
-    showToast(`A tutor with the phone number <strong>${phone}</strong> is already in the roster. Please check for duplicates.`);
+    showToast(`A tutor with the phone number <strong>${escapeHtml(phone)}</strong> is already in the roster. Please check for duplicates.`);
     return;
   }
 

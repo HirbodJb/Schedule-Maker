@@ -185,6 +185,7 @@ function buildAppSnapshot(){
 
 function restoreAppSnapshot(snapshot){
   if(!snapshot) return;
+  snapshot=normalizeProjectSnapshot(snapshot);
 
   tutors=snapshot.tutors.map(t=>({
     ...t,
@@ -409,16 +410,15 @@ function downloadProjectFile(projectName){
 function handleProjectFile(input){
   const file = input && input.files ? input.files[0] : null;
   if(!file) return;
+  if(!localFileIsAllowed(file,'project file')){ input.value=''; return; }
 
   const reader = new FileReader();
   reader.onload = e => {
     try{
       const payload = JSON.parse(e.target.result);
-      const snapshot = payload && payload.snapshot ? payload.snapshot : payload;
+      const rawSnapshot = payload && payload.snapshot ? payload.snapshot : payload;
 
-      if(!snapshot || !Array.isArray(snapshot.tutors)){
-        throw new Error('Invalid project file');
-      }
+      const snapshot = normalizeProjectSnapshot(rawSnapshot);
 
       const doLoad = () => {
         if(tutors.length || currentSlots.length){
