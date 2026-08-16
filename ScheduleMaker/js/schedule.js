@@ -941,10 +941,10 @@ function exportScheduleExcel(){
     <html>
       <head>
         <meta charset="UTF-8">
-        <meta name="application-name" content="CAS ESL Schedule Builder">
+        <meta name="application-name" content="ESL Schedule Builder">
         <meta name="author" content="Hirbod Jabbarnezhad">
         <meta name="creator" content="Hirbod Jabbarnezhad">
-        <meta name="software" content="CAS ESL Schedule Builder">
+        <meta name="software" content="ESL Schedule Builder">
         <meta name="version" content="1.0">
         <meta name="copyright" content="Copyright (c) 2026 Hirbod Jabbarnezhad">
         ${metadataComment()}
@@ -957,7 +957,7 @@ function exportScheduleExcel(){
       </head>
       <body>
         ${metadataHiddenBlock()}
-        <h2>CAS ESL Weekly Schedule</h2>
+        <h2>ESL Weekly Schedule</h2>
         <p><strong>Schedule period:</strong> ${esc(schedulePeriodText())}${scheduleSettings.weeklyBudget?` · <strong>Weekly budget:</strong> ${scheduleSettings.weeklyBudget.toFixed(1)} hours`:''}</p>
         <table>
   `;
@@ -976,7 +976,7 @@ function exportScheduleExcel(){
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = 'cas-esl-weekly-schedule.xls';
+  a.download = 'esl-weekly-schedule.xls';
   document.body.appendChild(a);
   a.click();
   a.remove();
@@ -1010,10 +1010,10 @@ function exportSchedulePDF(){
   });
 
   doc.setProperties({
-    title:'CAS ESL Weekly Schedule',
+    title:'ESL Weekly Schedule',
     subject:'ESL Tutor Scheduling',
     author:metadata.createdBy,
-    keywords:`${metadata.software}, ${metadata.createdBy}, Pierce College, CAS, ESL, version ${metadata.version}, ${metadata.copyright}`,
+    keywords:`${metadata.software}, ${metadata.createdBy}, ESL, scheduling, version ${metadata.version}, ${metadata.copyright}`,
     creator:metadata.software
   });
 
@@ -1025,11 +1025,11 @@ function exportSchedulePDF(){
 
   doc.setFont('helvetica','bold');
   doc.setFontSize(18);
-  doc.text('CAS ESL Weekly Schedule', 40, 42);
+  doc.text('ESL Weekly Schedule', 40, 42);
 
   doc.setFont('helvetica','normal');
   doc.setFontSize(10);
-  doc.text('Pierce College · Center for Academic Success', 40, 58);
+  doc.text('Tutor and class scheduling tool', 40, 58);
   doc.text(`${metadata.software} v${metadata.version}`, 40, 73);
   doc.text(`Period: ${schedulePeriodText()}${scheduleSettings.weeklyBudget?` · Weekly budget: ${scheduleSettings.weeklyBudget.toFixed(1)} hours`:''}`, 40, 88);
 
@@ -1075,7 +1075,7 @@ function exportSchedulePDF(){
     }
   });
 
-  doc.save('CAS ESL Weekly Schedule.pdf');
+  doc.save('ESL Weekly Schedule.pdf');
   showToast('PDF schedule downloaded with embedded author metadata.', 'ok');
 }
 
@@ -1206,7 +1206,7 @@ function autoPlaceCETStudyGroups(slots){
             placeStudyGroupBlock(tutor, cls, a, a.sgPlacement.day, a.sgPlacement.startTime, slots, true);
           } else {
             a.sgStatus = 'manual-needed';
-            a.sgNote = 'The selected asynchronous SG time is no longer valid because it is outside CAS hours, overlaps another block, or the tutor is unavailable.';
+            a.sgNote = 'The selected asynchronous SG time is no longer valid because it is outside operating hours, overlaps another block, or the tutor is unavailable.';
             unresolved.push({cls, assignment:a});
           }
         } else {
@@ -1361,7 +1361,7 @@ function autoPlaceCETStudyGroups(slots){
             placeStudyGroupBlock(tutor, cls, a, a.sgPlacement.day, a.sgPlacement.startTime, slots, true);
           } else {
             a.sgStatus = 'manual-needed';
-            a.sgNote = 'The selected asynchronous SG time is no longer valid because it is outside CAS hours, overlaps another block, or the tutor is unavailable.';
+            a.sgNote = 'The selected asynchronous SG time is no longer valid because it is outside operating hours, overlaps another block, or the tutor is unavailable.';
             unresolved.push({cls, assignment:a});
           }
         } else {

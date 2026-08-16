@@ -322,7 +322,7 @@ function editTutor(id){
         </div>
         <div class="form-grid" style="align-items:end">
           <div class="fg"><span class="fl">Desired hrs / week</span><select id="edit-hrs">${hrsOptions}</select></div>
-          <div class="fg"><span class="fl" style="line-height:1.35;text-transform:none;font-size:10px;letter-spacing:0">Hours/wk in another Pierce College position (not ESL/CAS)</span><input id="edit-other" type="number" min="0" max="25" value="${Number(tutor.other)||0}" placeholder="0"></div>
+          <div class="fg"><span class="fl" style="line-height:1.35;text-transform:none;font-size:10px;letter-spacing:0">Hours/wk in another campus position (not ESL tutoring)</span><input id="edit-other" type="number" min="0" max="25" value="${Number(tutor.other)||0}" placeholder="0"></div>
           <div class="fg"><span class="fl">Mode</span><select id="edit-mode">${modeOptions}</select></div>
           <div class="fg"><span class="fl">Saturday</span><select id="edit-sat"><option value="no" ${!tutor.sat?'selected':''}>Not available Sat</option><option value="yes" ${tutor.sat?'selected':''}>Available Saturday</option></select></div>
           <div class="fg"><span class="fl">Schedule stability</span><select id="edit-stable"><option value="stable" ${tutor.stable==='stable'?'selected':''}>Stable</option><option value="maybe" ${tutor.stable==='maybe'?'selected':''}>May change</option><option value="tentative" ${tutor.stable==='tentative'?'selected':''}>Tentative</option></select></div>

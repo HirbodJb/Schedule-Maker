@@ -1,6 +1,6 @@
-# CAS ESL Schedule Builder
+# ESL Schedule Builder
 
-A professional scheduling application developed for the **Center for Academic Success (CAS)** at **Los Angeles Pierce College** to automate and simplify ESL tutor scheduling.
+A professional scheduling application developed to automate and simplify ESL tutor scheduling.
 
 The application generates optimized weekly tutoring schedules, manages Course Embedded Tutor (CET) assignments, automatically places Study Groups, balances tutor workloads, and provides coordinators with powerful scheduling and roster management tools.
 
@@ -9,9 +9,6 @@ The application generates optimized weekly tutoring schedules, manages Course Em
 ---
 
 ## Live Demo
-
-**Application**
-https://cas-esl-schedule-builder.netlify.app/
 
 **GitHub Repository**
 https://github.com/HirbodJb/Schedule-Maker
@@ -22,13 +19,13 @@ Current Version: **v2.1**
 
 # Project Overview
 
-The CAS ESL tutoring program schedules dozens of tutors every semester across multiple classes, tutoring modalities, Course Embedded Tutor (CET) assignments, and Study Groups.
+ESL tutoring programs schedule dozens of tutors every semester across multiple classes, tutoring modalities, Course Embedded Tutor (CET) assignments, and Study Groups.
 
 Originally, this scheduling process was performed manually, requiring hours of coordinator work each semester.
 
-CAS ESL Schedule Builder was developed to automate this workflow while still giving coordinators full manual control whenever adjustments are needed.
+ESL Schedule Builder was developed to automate this workflow while still giving coordinators full manual control whenever adjustments are needed.
 
-The application is designed around real scheduling rules used by the Pierce College Center for Academic Success.
+The application is designed around real-world tutoring-center scheduling rules.
 
 ---
 
@@ -210,26 +207,6 @@ The scheduling engine has been continuously refined through multiple versions ba
 
 ---
 
-# Screenshots
-
-## Schedule Generation
-
-![alt text](image.png)
-
-## Course Embedded Tutor Management
-
-![alt text](image-1.png)
-
-## Weekly Schedule
-
-![alt text](image-2.png)
-
-## Analytics
-
-![alt text](image-3.png)
-
----
-
 # Version History
 
 ## v2.1
@@ -286,7 +263,7 @@ Initial release featuring:
 
 # Why I Built This
 
-As a Computer Science student and Course Embedded Tutor at Pierce College, I saw firsthand how much time coordinators spent manually creating tutoring schedules every semester.
+As a Computer Science student and Course Embedded Tutor, I saw firsthand how much time coordinators spent manually creating tutoring schedules every semester.
 
 This project began as a way to automate that process but evolved into a full scheduling platform capable of handling real operational constraints, improving schedule quality, and simplifying coordinator workflows.
 

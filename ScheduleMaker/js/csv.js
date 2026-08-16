@@ -154,7 +154,7 @@ function parseManualCSVRow(vals, headers, hasHeader){
   let satRaw = firstCSVValue(row, ['saturday','sat'], null);
   let eng101Raw = firstCSVValue(row, ['eng101','eng 101','engl c1000','completed eng 101','completed eng 101 / engl c1000','completed eng101'], null);
   let priorityRaw = firstCSVValue(row, ['priority','agree','scheduling priority','priority acknowledgment','scheduling priority acknowledgment'], null);
-  let otherRaw = firstCSVValue(row, ['other campus hours','other hours','other','other pierce hours'], null);
+  let otherRaw = firstCSVValue(row, ['other campus hours','other college hours','other hours','other'], null);
   let stableRaw = firstCSVValue(row, ['stability','schedule stability'], null);
 
   if(!hasHeader){

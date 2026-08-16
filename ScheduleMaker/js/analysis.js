@@ -105,7 +105,7 @@ function calculateScheduleQuality(slots=currentSlots){
   const workCoveredSlots = slots.filter(s=>analysisSlotHasAnyWork(s));
   const trueOpenSlots = slots.filter(s=>!analysisSlotHasAnyWork(s));
 
-  // Thin coverage still means regular CAS tutoring-center backup is thin.
+  // Thin coverage still means regular tutoring-center backup is thin.
   // SG/CET blocks are real work, but they do not act as extra drop-in tutoring backup.
   const thinCoverage = slots.filter(s=>{
     const regular = analysisRegularItems(s).length;

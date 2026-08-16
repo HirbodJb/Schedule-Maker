@@ -1,7 +1,7 @@
 // ── App metadata / authorship ───────────────────────────────
 const APP_METADATA = Object.freeze({
   createdBy: 'Hirbod Jabbarnezhad',
-  software: 'CAS ESL Schedule Builder',
+  software: 'ESL Schedule Builder',
   version: '2.0',
   year: '2026',
   copyright: 'Copyright (c) 2026 Hirbod Jabbarnezhad',
@@ -20,7 +20,7 @@ function metadataComment(){
 }
 
 function metadataHiddenBlock(){
-  return `<pre style="display:none" data-cas-esl-metadata="true">${escapeHtml(JSON.stringify(appMetadata(), null, 2))}</pre>`;
+  return `<pre style="display:none" data-esl-schedule-metadata="true">${escapeHtml(JSON.stringify(appMetadata(), null, 2))}</pre>`;
 }
 
 // ── Constants ────────────────────────────────────────────

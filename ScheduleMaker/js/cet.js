@@ -1,6 +1,6 @@
 // ══════════════════════════════════════════════════════════════
 //  cet.js — Course Embedded Tutor (CET) feature
-//  CAS ESL Schedule Builder · Hirbod Jabbarnezhad
+//  ESL Schedule Builder · Hirbod Jabbarnezhad
 // ══════════════════════════════════════════════════════════════
 
 // ── Helpers ──────────────────────────────────────────────────
@@ -270,7 +270,7 @@ function renderCET(){
           <div class="h-name" style="font-size:12px">${t.name}</div>
           <div style="font-size:10px;color:var(--muted);margin-top:2px">
             ${cetHrs > 0
-              ? `${cetHrs}h CET · ${remaining}h left for CAS`
+              ? `${cetHrs}h CET · ${remaining}h left for tutoring`
               : `${t.hrs}h available · no CET yet`}
             ${assignedCount > 0 ? ` · ${assignedCount} class${assignedCount!==1?'es':''}` : ''}
           </div>
@@ -471,7 +471,7 @@ function assignCET(classId){
 
 function doAssignCET(cls, tutorId){
   cls.assignedTutorId = tutorId;
-  showToast(`Assigned! ${cls.hrsPerWeek}h/wk deducted from their CAS hours (${classContactHours(cls)}h class/coursework${cls.requiresStudyGroup===false?'':' + 1h study group'}).`,'ok', 5000);
+  showToast(`Assigned! ${cls.hrsPerWeek}h/wk deducted from their tutoring hours (${classContactHours(cls)}h class/coursework${cls.requiresStudyGroup===false?'':' + 1h study group'}).`,'ok', 5000);
   renderCET();
 }
 
@@ -579,7 +579,7 @@ function _openClassModal(editId, data){
             <span>This class needs 1-hour study group</span>
           </label>
           <select id="cm-sg-mode" style="margin-top:8px">
-            <option value="in-person" ${(data.studyGroupMode||'in-person')==='in-person'?'selected':''}>In-person at CAS</option>
+            <option value="in-person" ${(data.studyGroupMode||'in-person')==='in-person'?'selected':''}>In-person at the tutoring center</option>
             <option value="online" ${(data.studyGroupMode||'')==='online'?'selected':''}>Online</option>
           </select>
         </div>
@@ -798,7 +798,7 @@ function importBulk(){
 
 // ── CET hours deduction for schedule page ────────────────────
 // Call this from schedule.js when computing tutor available hours.
-// Returns how many hours/wk a tutor has committed to CET (reduces CAS hours).
+// Returns how many hours/wk a tutor has committed to CET (reduces tutoring hours).
 function getCETHoursFor(tutorId){
   return cetClasses
     .filter(c => c.assignedTutorId === tutorId)
@@ -1186,7 +1186,7 @@ function renderCET(){
         <div style="flex:1;min-width:0">
           <div class="h-name" style="font-size:12px">${cetEsc(t.name)}</div>
           <div style="font-size:10px;color:var(--muted);margin-top:2px">
-            ${cetHrs > 0 ? `${formatCETHours(cetHrs)} CET · ${formatCETHours(remaining)} left for CAS` : `${t.hrs}h available · no CET yet`}
+            ${cetHrs > 0 ? `${formatCETHours(cetHrs)} CET · ${formatCETHours(remaining)} left for tutoring` : `${t.hrs}h available · no CET yet`}
             ${assignedCount > 0 ? ` · ${assignedCount} block${assignedCount!==1?'s':''}` : ''}
             ${unresolvedSGCount > 0 ? ` · ⚠ ${unresolvedSGCount} SG` : ''}
           </div>
@@ -1285,7 +1285,7 @@ function openCETAssignModal(classId){
   ov.innerHTML = `<div class="cet-modal cet-assign-modal" role="dialog" aria-modal="true">
     <div class="cet-modal-header"><h3>Add CET tutor block</h3><button class="cet-modal-close" onclick="closeCETAssignModal()">&times;</button></div>
     <div class="cet-modal-body">
-      <div class="cet-study-note" style="margin-top:0">${cetEsc(cls.title || 'This class')} · choose exactly which days and times this tutor will attend. These hours will be deducted from their CAS schedule availability.</div>
+      <div class="cet-study-note" style="margin-top:0">${cetEsc(cls.title || 'This class')} · choose exactly which days and times this tutor will attend. These hours will be deducted from their tutoring schedule availability.</div>
       <div class="form-grid two" style="margin-top:12px">
         <div class="fg"><span class="fl">Tutor</span><select id="ca-tutor" onchange="updateCETAssignPreview(${cls.id})">
           <option value="">— Select tutor —</option>
@@ -1408,7 +1408,7 @@ function saveCETAssignment(classId){
     });
     closeCETAssignModal();
     renderCET();
-    showToast(`${tutor.name} added to ${cls.title}. ${formatCETHours(draft.weeklyHours)} deducted from CAS hours.${needsSG ? ' SG will be checked during schedule generation.' : ''}`, 'ok', 5500);
+    showToast(`${tutor.name} added to ${cls.title}. ${formatCETHours(draft.weeklyHours)} deducted from tutoring hours.${needsSG ? ' SG will be checked during schedule generation.' : ''}`, 'ok', 5500);
   };
 
   const warnings = [];
@@ -1559,7 +1559,7 @@ function cetOperatingTimesForDay(day){
   return typeof timesForDay === 'function' ? timesForDay(day) : (day === 'Friday' ? TIMES_FRI : TIMES_MF);
 }
 
-function isOneHourBlockInsideCAS(day, startTime){
+function isOneHourBlockInsideOperatingHours(day, startTime){
   if(!day || !startTime) return false;
   const times = cetOperatingTimesForDay(day);
   const start = timeToMins(startTime);
@@ -1666,7 +1666,7 @@ function _openClassModal(editId, data){
             <span>This class needs 1-hour study group</span>
           </label>
           <select id="cm-sg-mode" style="margin-top:8px">
-            <option value="in-person" ${(data.studyGroupMode||'in-person')==='in-person'?'selected':''}>In-person at CAS</option>
+            <option value="in-person" ${(data.studyGroupMode||'in-person')==='in-person'?'selected':''}>In-person at the tutoring center</option>
             <option value="online" ${(data.studyGroupMode||'')==='online'?'selected':''}>Online</option>
           </select>
         </div>
@@ -2061,7 +2061,7 @@ function updateCETAssignPreview(classId){
       if(!draft.sgDay || !draft.sgStart){
         notes.push('Choose a manual SG day and start time for this asynchronous class.');
       } else {
-        if(!isOneHourBlockInsideCAS(draft.sgDay, draft.sgStart)) notes.push('The SG must be a full 1-hour block inside CAS operating hours.');
+        if(!isOneHourBlockInsideOperatingHours(draft.sgDay, draft.sgStart)) notes.push('The SG must be a full 1-hour block inside operating hours.');
         if(!tutorAvailableForOneHourBlock(tutor, draft.sgDay, draft.sgStart)) notes.push(`${cetEsc(tutor.name)} is not available for the full selected SG hour.`);
         const overlaps = [draft.sgStart, minsToScheduleTime(timeToMins(draft.sgStart)+30)].some(t => isTutorBusyWithCET(tutor.id, draft.sgDay, t));
         if(overlaps) notes.push('This SG overlaps another CET/SG block for this tutor.');
@@ -2114,7 +2114,7 @@ function saveCETAssignment(classId){
   if(isAsync){
     if(needsSG){
       if(!draft.sgDay || !draft.sgStart){ showToast('Choose the SG day and start time for this asynchronous class.', 'warn'); return; }
-      if(!isOneHourBlockInsideCAS(draft.sgDay, draft.sgStart)){ showToast('The selected SG must be inside CAS operating hours.', 'warn'); return; }
+      if(!isOneHourBlockInsideOperatingHours(draft.sgDay, draft.sgStart)){ showToast('The selected SG must be inside operating hours.', 'warn'); return; }
       if(!tutorAvailableForOneHourBlock(tutor, draft.sgDay, draft.sgStart)){ showToast(`${tutor.name} is not available for the full selected SG hour.`, 'warn'); return; }
       const overlaps = [draft.sgStart, minsToScheduleTime(timeToMins(draft.sgStart)+30)].some(t => isTutorBusyWithCET(tutor.id, draft.sgDay, t));
       if(overlaps){ showToast('This SG overlaps another CET/SG block for this tutor.', 'warn'); return; }
@@ -2151,7 +2151,7 @@ function saveCETAssignment(classId){
     });
     closeCETAssignModal();
     renderCET();
-    showToast(`${tutor.name} added to ${cls.title}. ${formatCETHours(totalNeeded)} deducted from CAS hours.${sgPlacement ? ' SG time saved.' : needsSG ? ' SG will be checked during schedule generation.' : ''}`, 'ok', 5500);
+    showToast(`${tutor.name} added to ${cls.title}. ${formatCETHours(totalNeeded)} deducted from tutoring hours.${sgPlacement ? ' SG time saved.' : needsSG ? ' SG will be checked during schedule generation.' : ''}`, 'ok', 5500);
   };
 
   if(!isAsync){

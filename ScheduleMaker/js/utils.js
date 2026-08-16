@@ -284,17 +284,17 @@ function saveProject(){
 function defaultProjectName(){
   const d = new Date();
   const date = d.toLocaleDateString(undefined, {year:'numeric', month:'short', day:'numeric'});
-  return `CAS ESL Schedule — ${date}`;
+  return `ESL Schedule — ${date}`;
 }
 
 function sanitizeProjectFileName(name){
-  return String(name || 'CAS ESL Schedule Project')
+  return String(name || 'ESL Schedule Project')
     .trim()
     .replace(/[<>:"/\\|?*\x00-\x1F]/g, '')
     .replace(/\s+/g, '-')
     .replace(/-+/g, '-')
     .replace(/^-|-$/g, '')
-    .slice(0, 80) || 'CAS-ESL-Schedule-Project';
+    .slice(0, 80) || 'ESL-Schedule-Project';
 }
 
 function openSaveProjectModal(){
@@ -381,7 +381,7 @@ function downloadProjectFile(projectName){
 
   const payload = {
     app:metadata.software,
-    type:'cas-esl-scheduler-project',
+    type:'esl-scheduler-project',
     version:metadata.version,
     projectName,
     savedAt:metadata.exportedAt,

@@ -75,8 +75,8 @@ function openAboutModal(){
       <div class="about-modal-top">
         <div class="about-modal-icon"><i class="ti ti-calendar-event"></i></div>
         <div>
-          <div class="about-modal-title" id="about-title">CAS ESL Schedule Builder</div>
-          <div class="about-modal-sub">Pierce College · Center for Academic Success scheduling tool</div>
+          <div class="about-modal-title" id="about-title">ESL Schedule Builder</div>
+          <div class="about-modal-sub">Tutor and class scheduling tool</div>
         </div>
       </div>
       <div class="about-modal-body">
@@ -84,7 +84,7 @@ function openAboutModal(){
           <div class="credit-label">Original creator</div>
           <div class="credit-name">Hirbod Jabbarnezhad</div>
           <div class="credit-text">
-            Originally designed and developed by Hirbod Jabbarnezhad for the CAS ESL scheduling workflow.
+            Originally designed and developed by Hirbod Jabbarnezhad for an ESL scheduling workflow.
             This credit should remain included in the software, documentation, and shared copies.
           </div>
           <div class="credit-grid">
@@ -107,7 +107,7 @@ function openAboutModal(){
           </div>
         </div>
         <div class="credit-text">
-          Modified versions should clearly state that they are based on the original CAS ESL Schedule Builder created by Hirbod Jabbarnezhad.
+          Modified versions should clearly state that they are based on the original ESL Schedule Builder created by Hirbod Jabbarnezhad.
         </div>
         <div class="about-modal-actions">
           <button class="btn btn-red" onclick="closeAboutModal()"><i class="ti ti-check"></i> Close</button>
