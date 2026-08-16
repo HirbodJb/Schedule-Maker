@@ -308,7 +308,7 @@ function editTutor(id){
       </div>
       <div class="edit-modal-body">
         <div class="form-grid two" style="margin-top:0">
-          <div class="fg"><span class="fl">Full name <span style="color:var(--red)">*</span></span><input id="edit-name" value="${escapeHtml(tutor.name||'')}" placeholder="e.g. Jamie Ray"></div>
+          <div class="fg"><span class="fl">Full name <span style="color:var(--red)">*</span></span><input id="edit-name" value="${escapeHtml(tutor.name||'')}" placeholder="e.g. Firstname Lastname"></div>
           <div class="fg"><span class="fl">LACCD email <span style="color:var(--red)">*</span></span><input id="edit-email" value="${escapeHtml(tutor.email||'')}" placeholder="name@laccd.edu"></div>
         </div>
         <div class="form-grid two">
