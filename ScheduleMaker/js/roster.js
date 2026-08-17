@@ -30,12 +30,14 @@ function renderTutors(){
     const phoneStr = t.phone ? ` · ${escapeHtml(t.phone)}` : '';
     const eng101Str = t.eng101 ? ` · ENG101: ${t.eng101==='yes'?'✓':'Not yet'}` : '';
     const priorityStr = t.priority==='disagree'?' · <span style="color:var(--red)">⚠ Disagrees w/ priority policy</span>':'';
+    const notesButton = t.notes ? `<button type="button" class="tutor-notes-btn" onclick="showTutorNotes(${Number(t.id)})"><i class="ti ti-note"></i> Notes</button>` : '';
     const searchKey = escapeHtml([t.name,t.email,t.phone,(t.phone||'').replace(/\D/g,''),t.eng101,t.mode,t.stable].filter(Boolean).join(' ').toLowerCase());
     return `<div class="tc" id="tutor-card-${t.id}" data-search="${searchKey}" style="--tc-bg:${c.bg};--tc-border:${c.border};--tc-text:${c.text}">
       <div class="tc-ribbon" style="background:${ribbonColor}"></div>
       <div class="avatar" style="background:${c.bg};color:${c.text}">${escapeHtml(initials(t.name))}</div>
       <div class="tc-info">
         <div class="tc-name">${escapeHtml(t.name)}${t.email?`<span style="font-size:11px;font-weight:400;color:var(--muted)">${escapeHtml(t.email)}</span>`:''}${sourceTag}</div>
+        ${notesButton}
         <div class="tc-meta">${t.hrs} hrs/wk · ${avCount} slots available · ${modeTag}${satTag} <span style="color:${stableColor};font-weight:700">${stableLabel}</span>${phoneStr}${eng101Str}${priorityStr}</div>
       </div>
       <div class="tc-actions">
@@ -44,6 +46,43 @@ function renderTutors(){
       </div>
     </div>`;
   }).join('');
+}
+
+function closeTutorNotes(){
+  const overlay = document.getElementById('tutor-notes-overlay');
+  if(overlay) overlay.remove();
+}
+
+function showTutorNotes(id){
+  const tutor = getTutorById(id);
+  if(!tutor || !tutor.notes) return;
+  closeTutorNotes();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'tutor-notes-overlay';
+  const box = document.createElement('div');
+  box.className = 'tutor-notes-box';
+  box.setAttribute('role', 'dialog');
+  box.setAttribute('aria-modal', 'true');
+  box.setAttribute('aria-labelledby', 'tutor-notes-title');
+  const title = document.createElement('h4');
+  title.id = 'tutor-notes-title';
+  title.textContent = `${tutor.name} — Notes`;
+  const body = document.createElement('p');
+  body.textContent = tutor.notes;
+  const actions = document.createElement('div');
+  actions.className = 'confirm-actions';
+  const close = document.createElement('button');
+  close.type = 'button';
+  close.className = 'btn btn-red';
+  close.textContent = 'Close';
+  close.addEventListener('click', closeTutorNotes);
+  actions.appendChild(close);
+  box.append(title, body, actions);
+  overlay.appendChild(box);
+  overlay.addEventListener('click', event=>{ if(event.target === overlay) closeTutorNotes(); });
+  document.body.appendChild(overlay);
+  close.focus();
 }
 
 function clearRosterSearchHighlights(){
@@ -327,6 +366,7 @@ function editTutor(id){
           <div class="fg"><span class="fl">Saturday</span><select id="edit-sat"><option value="no" ${!tutor.sat?'selected':''}>Not available Sat</option><option value="yes" ${tutor.sat?'selected':''}>Available Saturday</option></select></div>
           <div class="fg"><span class="fl">Schedule stability</span><select id="edit-stable"><option value="stable" ${tutor.stable==='stable'?'selected':''}>Stable</option><option value="maybe" ${tutor.stable==='maybe'?'selected':''}>May change</option><option value="tentative" ${tutor.stable==='tentative'?'selected':''}>Tentative</option></select></div>
         </div>
+        <div class="fg" style="margin-top:12px"><span class="fl">Notes</span><textarea id="edit-notes" class="edit-notes-input" maxlength="4000" placeholder="Optional scheduling notes">${escapeHtml(tutor.notes||'')}</textarea></div>
         <div style="background:var(--warn-bg);border:1px solid var(--warn-b);border-radius:12px;padding:13px 16px;margin-top:4px">
           <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;margin-bottom:8px">Scheduling priority acknowledgment <span style="color:var(--red)">*</span></div>
           <p style="font-size:12px;color:var(--ink);margin-bottom:10px;line-height:1.5">ESL tutors who are available to work in person are given scheduling priority. Do you agree with this?</p>
@@ -432,6 +472,7 @@ function saveTutorEdit(id){
     name,
     email,
     phone,
+    notes:cleanPlainText(document.getElementById('edit-notes').value,4000),
     eng101:document.getElementById('edit-eng101').value,
     hrs:parseInt(document.getElementById('edit-hrs').value)||8,
     other:parseInt(document.getElementById('edit-other').value)||0,

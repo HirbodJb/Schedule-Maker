@@ -219,7 +219,7 @@ function renderCET(){
   if(!hasClasses){
     html += `<div class="empty" style="margin-top:12px">
       <i class="ti ti-school" style="font-size:28px;display:block;margin-bottom:10px;opacity:.4"></i>
-      No ESL classes yet. Click <strong>Add class</strong> to add one, or use <strong>Bulk add</strong> to paste a list quickly.
+      No ESL classes yet. Click <strong>Import CSV</strong>, <strong>Add class</strong>, or use <strong>Bulk add</strong> to paste a list quickly.
     </div>`;
     pane.innerHTML = html;
     return;
@@ -1144,13 +1144,15 @@ function renderCET(){
     <div class="cet-toolbar-right">
       <button class="btn" onclick="switchPane('generate')"><i class="ti ti-calendar-event"></i> Generate schedule →</button>
       <button class="btn btn-red" onclick="openAddClassModal()"><i class="ti ti-plus"></i> Add class</button>
+      <input type="file" id="cet-csv-file" accept=".csv,text/csv" hidden onchange="handleCETCSV(this)">
+      <button class="btn btn-sm" onclick="document.getElementById('cet-csv-file').click()"><i class="ti ti-file-spreadsheet"></i> Import CSV</button>
       <button class="btn btn-sm" onclick="openBulkAddModal()"><i class="ti ti-list-check"></i> Bulk add</button>
       <button class="btn btn-sm btn-danger" ${!hasClasses?'style="display:none"':''} onclick="clearAllCETClasses()"><i class="ti ti-trash"></i> Clear classes</button>
     </div>
   </div>`;
 
   if(!hasClasses){
-    html += `<div class="empty" style="margin-top:12px"><i class="ti ti-school" style="font-size:28px;display:block;margin-bottom:10px;opacity:.4"></i>No ESL classes yet. Click <strong>Add class</strong> to add one, or use <strong>Bulk add</strong> to paste a list quickly.</div>`;
+    html += `<div class="empty" style="margin-top:12px"><i class="ti ti-school" style="font-size:28px;display:block;margin-bottom:10px;opacity:.4"></i>No ESL classes yet. Click <strong>Import CSV</strong>, <strong>Add class</strong>, or use <strong>Bulk add</strong> to paste a list quickly.</div>`;
     pane.innerHTML = html;
     return;
   }
@@ -1239,6 +1241,13 @@ function renderClassCard(cls){
       <span class="cet-meta-chip"><i class="ti ti-hours-24"></i> Target ${cls.hrsPerWeek||'?'}h/wk</span>
       ${assignments.length ? `<span class="cet-meta-chip"><i class="ti ti-check"></i> Assigned ${formatCETHours(totalAssigned)}</span>` : ''}
     </div>
+    ${(cls.section || cls.status || cls.room || cls.meetingDates) ? `<div class="cet-imported-details">
+      ${cls.section ? `<span><strong>Section:</strong> ${cetEsc(cls.section)}</span>` : ''}
+      ${cls.status ? `<span><strong>Status:</strong> ${cetEsc(cls.status)}</span>` : ''}
+      ${cls.room ? `<span><strong>Room:</strong> ${cetEsc(cls.room)}</span>` : ''}
+      ${cls.meetingDates ? `<span><strong>Dates:</strong> ${cetEsc(cls.meetingDates)}</span>` : ''}
+    </div>` : ''}
+    ${(cls.requestNotes || (!cls.startTime && cls.sourceSchedule)) ? `<div class="cet-request-note"><i class="ti ti-note"></i><div>${cls.requestNotes ? `<strong>Request:</strong> ${cetEsc(cls.requestNotes)}` : ''}${!cls.startTime && cls.sourceSchedule ? `<span><strong>Schedule:</strong> ${cetEsc(cls.sourceSchedule)}</span>` : ''}</div></div>` : ''}
     ${cls.hrsPerWeek > 0 ? `<div class="cet-hours-breakdown"><span class="cet-hrs-chip cet-hrs-class">${classHrs}h class contact</span>${sgHrs > 0 ? `<span class="cet-hrs-chip cet-hrs-sg">${studyGroupLabel(cls)}</span>` : `<span class="cet-hrs-chip cet-hrs-no-sg">No study group</span>`}</div>` : ''}
     <div class="cet-assign-row">`;
 
@@ -1495,6 +1504,12 @@ function saveClassModal(isEdit, editId){
   const obj = {
     id: isEdit ? editId : Date.now(),
     title, professor, semester, days, startTime, endTime, modality,
+    section:existing?.section || '',
+    status:existing?.status || '',
+    room:existing?.room || '',
+    meetingDates:existing?.meetingDates || '',
+    requestNotes:existing?.requestNotes || '',
+    sourceSchedule:existing?.sourceSchedule || '',
     hrsPerWeek, studyGroupMode: sgMode, requiresStudyGroup: requiresSG,
     wantsCET,
     assignedTutorId: null,
@@ -1530,6 +1545,163 @@ function parseBulkLine(line){
   const requiresStudyGroup = (parts[8] || 'yes').toLowerCase() !== 'no';
   const semester    = parts[9] || '';
   return normalizeCETClass({id: Date.now() + Math.random(), title, professor, days: daysRaw, startTime, endTime, modality, hrsPerWeek, studyGroupMode: requiresStudyGroup ? 'in-person' : 'none', requiresStudyGroup, wantsCET, semester, assignedTutorId:null, assignments:[]});
+}
+
+function handleCETCSV(input){
+  const file = input && input.files ? input.files[0] : null;
+  if(!file) return;
+  if(!localFileIsAllowed(file, 'CET CSV file')){ input.value=''; return; }
+  const reader = new FileReader();
+  reader.onload = event=>parseCETRequestCSVText(event.target.result);
+  reader.onerror = ()=>showToast('The CET CSV could not be read.', 'warn');
+  reader.readAsText(file);
+  input.value = '';
+}
+
+function parseCETDays(value){
+  const tokens = String(value || '').match(/Mo|Tu|We|Th|Fr|Sa|M|T|W|R|F|S/gi) || [];
+  const dayMap = {
+    mo:'Monday',m:'Monday',tu:'Tuesday',t:'Tuesday',we:'Wednesday',w:'Wednesday',
+    th:'Thursday',r:'Thursday',fr:'Friday',f:'Friday',sa:'Saturday',s:'Saturday'
+  };
+  return [...new Set(tokens.map(token=>dayMap[token.toLowerCase()]).filter(Boolean))];
+}
+
+function parseCETClock(value){
+  const compact = String(value || '').trim().toUpperCase().replace(/\s+/g, '');
+  const match = compact.match(/^(\d{1,4})(?::(\d{2}))?(AM|PM)?$/);
+  if(!match) return null;
+  const digits = match[1];
+  let hour;
+  let minute;
+  if(match[2] !== undefined){
+    hour = Number(digits);
+    minute = Number(match[2]);
+  } else if(digits.length >= 3){
+    hour = Number(digits.slice(0, -2));
+    minute = Number(digits.slice(-2));
+  } else {
+    hour = Number(digits);
+    minute = 0;
+  }
+  if(hour > 23 || minute > 59) return null;
+  if(match[3]){
+    hour %= 12;
+    if(match[3] === 'PM') hour += 12;
+  }
+  return hour * 60 + minute;
+}
+
+function cetMinutesToTime(total){
+  const normalized = ((total % 1440) + 1440) % 1440;
+  return `${Math.floor(normalized/60)}:${String(normalized%60).padStart(2,'0')}`;
+}
+
+function parseCETMeetingSchedule(raw){
+  const lines = String(raw || '').split(/\r?\n/).map(line=>line.trim()).filter(Boolean);
+  for(const line of lines){
+    let match = line.match(/^([A-Za-z/]+)\s+(\d{1,2}(?::\d{2})?\s*(?:AM|PM))\s*[-–]\s*(\d{1,2}(?::\d{2})?\s*(?:AM|PM))/i);
+    if(!match){
+      match = line.match(/^([A-Za-z/]+)\s*-\s*(\d{1,4}(?::\d{2})?)\s*(?:to|[-–])\s*(\d{1,4}(?::\d{2})?)/i);
+    }
+    if(!match) continue;
+    const days = parseCETDays(match[1]);
+    let startMins = parseCETClock(match[2]);
+    let endMins = parseCETClock(match[3]);
+    if(!days.length || startMins === null || endMins === null) continue;
+    if(endMins <= startMins) endMins += 12 * 60;
+    return {days,startTime:cetMinutesToTime(startMins),endTime:cetMinutesToTime(endMins)};
+  }
+  return {days:[],startTime:'',endTime:''};
+}
+
+function semesterFromMeetingDates(value){
+  const match = String(value || '').match(/(\d{1,2})\/\d{1,2}\/(\d{4})/);
+  if(!match) return '';
+  const month = Number(match[1]);
+  const term = month >= 8 ? 'Fall' : month >= 5 ? 'Summer' : 'Spring';
+  return `${term} ${match[2]}`;
+}
+
+function cleanImportedCETRoom(value){
+  return cleanPlainText(String(value || '').replace(/\bPierce[-\s]*/gi, ''), 240);
+}
+
+function parseCETRequestCSVText(text){
+  if(typeof text !== 'string' || new Blob([text]).size > MAX_LOCAL_FILE_BYTES){
+    showToast('The CET CSV is too large. The local safety limit is 5 MB.', 'warn');
+    return;
+  }
+  const records = parseCSVRecords(text);
+  if(records.length < 2){ showToast('The CET CSV has no class rows.', 'warn'); return; }
+  const headers = records[0].map(normalizeCSVHeader);
+  const indexOf = name=>headers.indexOf(name);
+  const courseIndex = indexOf('course');
+  const daysIndex = indexOf('days & times');
+  if(courseIndex < 0 || daysIndex < 0){
+    showToast('This file does not look like a CET requests CSV. Course and Days & Times columns are required.', 'warn');
+    return;
+  }
+  const professorIndex = headers.findIndex((header,index)=>index === 0 || header === 'professor' || header === 'instructor');
+  const sectionIndex = indexOf('section');
+  const statusIndex = indexOf('status');
+  const roomIndex = indexOf('room');
+  const datesIndex = indexOf('meeting dates');
+  const notesIndex = indexOf('tutor request / notes');
+  let added = 0;
+  let skipped = 0;
+
+  records.slice(1, 1001).forEach((values,rowIndex)=>{
+    const course = cleanPlainText(values[courseIndex], 100);
+    const professor = cleanPlainText(values[professorIndex], 120);
+    if(!course){ skipped++; return; }
+    const section = sectionIndex >= 0 ? cleanPlainText(values[sectionIndex], 40) : '';
+    const title = cleanPlainText(`${course}${section ? ` · Section ${section}` : ''}`, 120);
+    if(cetClasses.some(cls=>cls.title.toLowerCase()===title.toLowerCase() && cls.professor.toLowerCase()===professor.toLowerCase())){
+      skipped++;
+      return;
+    }
+    const sourceSchedule = cleanPlainText(values[daysIndex], 500);
+    const schedule = parseCETMeetingSchedule(sourceSchedule);
+    const rawRoom = roomIndex >= 0 ? values[roomIndex] : '';
+    const roomLower = String(rawRoom || '').toLowerCase();
+    const modality = roomLower.includes('online live')
+      ? 'online-live'
+      : roomLower.includes('online') && !schedule.startTime
+        ? 'async'
+        : roomLower.includes('online') ? 'online-live' : 'in-person';
+    const meetingDates = datesIndex >= 0 ? cleanPlainText(values[datesIndex], 100) : '';
+    const imported = normalizeCETClass({
+      id:Date.now() + rowIndex + Math.random(),
+      title, professor,
+      section,
+      status:statusIndex >= 0 ? values[statusIndex] : '',
+      room:cleanImportedCETRoom(rawRoom),
+      meetingDates,
+      requestNotes:notesIndex >= 0 ? values[notesIndex] : '',
+      sourceSchedule,
+      semester:semesterFromMeetingDates(meetingDates) || 'Fall 2026',
+      days:modality === 'async' ? [] : schedule.days,
+      startTime:modality === 'async' ? '' : schedule.startTime,
+      endTime:modality === 'async' ? '' : schedule.endTime,
+      modality,
+      hrsPerWeek:0,
+      studyGroupMode:'in-person',
+      requiresStudyGroup:true,
+      wantsCET:true,
+      assignedTutorId:null,
+      assignments:[]
+    });
+    cetClasses.push(imported);
+    added++;
+  });
+
+  renderCET();
+  if(added){
+    showToast(`${added} CET class${added!==1?'es':''} imported${skipped ? ` · ${skipped} duplicate or invalid row${skipped!==1?'s':''} skipped` : ''}.`, 'ok', 4000);
+  } else {
+    showToast('No new CET classes were found in the CSV.', 'warn');
+  }
 }
 
 function exportCETState(){
@@ -1723,6 +1895,12 @@ function saveClassModal(isEdit, editId){
   const obj = {
     id: isEdit ? editId : Date.now(),
     title, professor, semester, days, startTime, endTime, modality,
+    section:existing?.section || '',
+    status:existing?.status || '',
+    room:existing?.room || '',
+    meetingDates:existing?.meetingDates || '',
+    requestNotes:existing?.requestNotes || '',
+    sourceSchedule:existing?.sourceSchedule || '',
     hrsPerWeek, studyGroupMode: sgMode, requiresStudyGroup: requiresSG,
     wantsCET,
     assignedTutorId: null,
@@ -1768,6 +1946,12 @@ function normalizeCETClass(cls){
   cls.title = cleanPlainText(cls.title, 120);
   cls.professor = cleanPlainText(cls.professor, 120);
   cls.semester = cleanPlainText(cls.semester, 80);
+  cls.section = cleanPlainText(cls.section, 40);
+  cls.status = cleanPlainText(cls.status, 120);
+  cls.room = cleanImportedCETRoom(cls.room);
+  cls.meetingDates = cleanPlainText(cls.meetingDates, 100);
+  cls.requestNotes = cleanPlainText(cls.requestNotes, 1000);
+  cls.sourceSchedule = cleanPlainText(cls.sourceSchedule, 500);
   cls.modality = ['in-person','online-live','async'].includes(cls.modality) ? cls.modality : 'in-person';
   cls.days = Array.isArray(cls.days) ? cls.days.filter(day => ALL_DAYS.includes(day)).slice(0, ALL_DAYS.length) : [];
   cls.startTime = /^\d{1,2}:\d{2}$/.test(String(cls.startTime || '')) ? String(cls.startTime) : '';

@@ -44,6 +44,7 @@ function normalizeTutorRecord(source, fallbackId){
     name:cleanPlainText(raw.name, 120),
     email:cleanPlainText(raw.email, 254),
     phone:cleanPlainText(raw.phone, 40),
+    notes:cleanPlainText(raw.notes, 4000),
     eng101:raw.eng101 === 'no' ? 'no' : 'yes',
     hrs:safeFiniteNumber(raw.hrs, 8, 0, 24),
     other:safeFiniteNumber(raw.other, 0, 0, 25),
@@ -141,4 +142,3 @@ function localFileIsAllowed(file, label='file'){
   }
   return true;
 }
-

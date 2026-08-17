@@ -13,13 +13,14 @@ function handleCSV(input){
 function parseDesiredHours(raw){
   const text = String(raw || '').trim().toLowerCase();
   if(!text) return 8;
+  const normalizedRange = text.replace(/[–—]/g, '-');
 
   // Google Forms answers may come in as labels like "1–5 hrs",
   // "6–10 hrs", "10–15 hrs", or "15–24 hrs (max)".
-  if(text.includes('15') && (text.includes('24') || text.includes('+') || text.includes('max'))) return 24;
-  if(text.includes('10') && text.includes('15')) return 12;
-  if(text.includes('6') && text.includes('10')) return 8;
-  if(text.includes('1') && text.includes('5')) return 3;
+  if(/\b15\s*(?:-\s*24|\+)/.test(normalizedRange) || text.includes('max')) return 24;
+  if(/\b10\s*-\s*15\b/.test(normalizedRange)) return 12;
+  if(/\b6\s*-\s*10\b/.test(normalizedRange)) return 8;
+  if(/\b1\s*-\s*5\b/.test(normalizedRange)) return 3;
 
   // Manual CSV can use exact desired hours like 10, 16, 20, etc.
   const n = parseFloat(text.replace(/[^0-9.]/g,''));
@@ -30,30 +31,47 @@ function parseDesiredHours(raw){
 
 
 function parseCSVLine(line){
-  const out = [];
-  let cur = '';
+  return parseCSVRecords(String(line || ''))[0] || [];
+}
+
+// Parse the whole document so commas and line breaks inside quoted Microsoft
+// Forms / Google Forms cells remain part of the cell instead of becoming rows.
+function parseCSVRecords(text){
+  const records = [];
+  let row = [];
+  let cell = '';
   let inQuotes = false;
 
-  for(let i=0;i<line.length;i++){
-    const ch = line[i];
-
+  for(let i=0;i<text.length;i++){
+    const ch = text[i];
     if(ch === '"'){
-      if(inQuotes && line[i+1] === '"'){
-        cur += '"';
+      if(inQuotes && text[i+1] === '"'){
+        cell += '"';
         i++;
       } else {
         inQuotes = !inQuotes;
       }
     } else if(ch === ',' && !inQuotes){
-      out.push(cur.trim());
-      cur = '';
+      row.push(cell.trim());
+      cell = '';
+    } else if((ch === '\n' || ch === '\r') && !inQuotes){
+      if(ch === '\r' && text[i+1] === '\n') i++;
+      row.push(cell.trim());
+      if(row.some(value=>value !== '')) records.push(row);
+      row = [];
+      cell = '';
     } else {
-      cur += ch;
+      cell += ch;
     }
   }
 
-  out.push(cur.trim());
-  return out.map(v => v.replace(/^"|"$/g,'').trim());
+  row.push(cell.trim());
+  if(row.some(value=>value !== '')) records.push(row);
+  return records;
+}
+
+function normalizeCSVHeader(value){
+  return String(value || '').replace(/^\uFEFF/, '').replace(/\s+/g, ' ').trim().toLowerCase();
 }
 
 function csvRowLooksLikeHeader(vals){
@@ -128,6 +146,77 @@ function firstCSVValue(row, names, fallbackIndex=null){
   }
   if(fallbackIndex !== null && fallbackIndex !== undefined) return row.__vals[fallbackIndex] || '';
   return '';
+}
+
+function matchingCSVValue(row, predicate){
+  for(const [header,value] of Object.entries(row)){
+    if(header !== '__vals' && predicate(header) && String(value || '').trim() !== '') return value;
+  }
+  return '';
+}
+
+function emptyImportedAvailability(){
+  const av = {};
+  TIMES_MF.forEach(time=>{
+    ALL_DAYS.forEach(day=>{
+      av[`${day}-${time}`] = day === 'Friday' && !TIMES_FRI.includes(time) ? null : false;
+    });
+  });
+  return av;
+}
+
+function isFormsAvailabilityCSV(headers){
+  return headers.some(header=>header.startsWith('mondays: select the times')) &&
+    headers.some(header=>header.startsWith('anything to add?'));
+}
+
+function parseFormsAvailabilityRow(vals, headers){
+  const row = {__vals:vals};
+  headers.forEach((header,index)=>row[header]=vals[index] || '');
+
+  const name = cleanPlainText(firstCSVValue(row, ['name'], null), 120);
+  const contactEmail = matchingCSVValue(row, header=>header.includes('laccd email contact address'));
+  const email = cleanPlainText(contactEmail || firstCSVValue(row, ['email'], null), 254);
+  const phone = cleanPlainText(matchingCSVValue(row, header=>header.startsWith('what is your phone number')), 40);
+  const eng101Raw = matchingCSVValue(row, header=>header.includes('completed eng 101') || header.includes('completed engl c1000'));
+  const otherRaw = matchingCSVValue(row, header=>header.startsWith('are you working in another position'));
+  const hrsRaw = matchingCSVValue(row, header=>header.startsWith('how many hours are you hoping to work'));
+  const stableRaw = matchingCSVValue(row, header=>header.includes('availability likely to change'));
+  const notes = cleanPlainText(matchingCSVValue(row, header=>header.startsWith('anything to add?')), 4000);
+  const av = emptyImportedAvailability();
+  let sat = false;
+
+  const days = {
+    mondays:'Monday', tuesdays:'Tuesday', wednesdays:'Wednesday',
+    thursdays:'Thursday', fridays:'Friday'
+  };
+
+  headers.forEach((header,index)=>{
+    const dayPrefix = Object.keys(days).find(prefix=>header.startsWith(`${prefix}:`));
+    if(dayPrefix){
+      String(vals[index] || '').split(';').forEach(interval=>{
+        const start = interval.match(/^\s*(\d{1,2}(?::\d{2})?\s*(?:am|pm))/i);
+        const time = start ? normalizeCSVTimeToken(start[1]) : '';
+        const key = time ? `${days[dayPrefix]}-${time}` : '';
+        if(key && key in av && av[key] !== null) av[key] = true;
+      });
+    }
+    if(header.startsWith('saturdays:') && String(vals[index] || '').trim()) sat = true;
+  });
+
+  const otherMatch = String(otherRaw || '').match(/\d+(?:\.\d+)?/);
+  return {
+    name,email,phone,
+    hrs:parseDesiredHours(hrsRaw),
+    other:otherMatch ? Math.min(25, Number(otherMatch[0])) : 0,
+    mode:'both',
+    sat,
+    stable:String(stableRaw || '').toLowerCase().startsWith('maybe') ? 'maybe' : 'stable',
+    eng101:yesNoFromText(eng101Raw, 'yes'),
+    priority:'agree',
+    notes,
+    av
+  };
 }
 
 function yesNoFromText(raw, defaultValue='yes'){
@@ -207,8 +296,7 @@ function parseManualCSVRow(vals, headers, hasHeader){
     }
   }
 
-  const av = {};
-  Object.keys(avail).forEach(k=>av[k]=false);
+  const av = emptyImportedAvailability();
 
   if(hasHeader){
     headers.forEach((h,idx)=>{
@@ -235,7 +323,29 @@ function parseManualCSVRow(vals, headers, hasHeader){
   const priority = String(priorityRaw || 'agree').toLowerCase().includes('disagree') ? 'disagree' : 'agree';
   const other = parseInt(otherRaw || '0') || 0;
 
-  return {name,email,phone:cleanPlainText(phone,40),hrs,other,mode,sat,stable,eng101,priority,av};
+  const notes = cleanPlainText(firstCSVValue(row, ['notes','note','additional notes','comments'], null), 4000);
+  return {name,email,phone:cleanPlainText(phone,40),hrs,other,mode,sat,stable,eng101,priority,notes,av};
+}
+
+function mergeTutorNotes(existing, incoming){
+  const parts = [existing, incoming].map(value=>cleanPlainText(value, 4000)).filter(Boolean);
+  return [...new Set(parts)].join('\n\n').slice(0, 4000);
+}
+
+function mergeImportedTutor(target, parsed){
+  Object.keys(target.avail || {}).forEach(key=>{
+    if(parsed.av && parsed.av[key] === true) target.avail[key] = true;
+  });
+  target.email = parsed.email || target.email;
+  target.phone = parsed.phone || target.phone;
+  target.eng101 = parsed.eng101 || target.eng101;
+  target.priority = parsed.priority || target.priority;
+  target.hrs = Math.max(Number(target.hrs)||0, Number(parsed.hrs)||0) || 8;
+  target.other = Math.max(Number(target.other)||0, Number(parsed.other)||0);
+  target.mode = parsed.mode || target.mode;
+  target.sat = target.sat || parsed.sat;
+  target.stable = parsed.stable || target.stable;
+  target.notes = mergeTutorNotes(target.notes, parsed.notes);
 }
 
 function parseCSVText(text){
@@ -243,31 +353,35 @@ function parseCSVText(text){
     showStatus('import-status','The pasted CSV is too large. The local safety limit is 5 MB.','err');
     return;
   }
-  const lines = text.trim().split(/\r?\n/).filter(l=>l.trim());
+  const records = parseCSVRecords(text);
 
-  if(lines.length < 1){
+  if(records.length < 1){
     showStatus('import-status','Paste at least one tutor row before parsing.','err');
     return;
   }
 
-  const firstVals = parseCSVLine(lines[0]);
+  const firstVals = records[0];
   const hasHeader = csvRowLooksLikeHeader(firstVals);
-  const headers = hasHeader ? firstVals.map(h=>h.trim().replace(/"/g,'').toLowerCase()) : [];
+  const headers = hasHeader ? firstVals.map(normalizeCSVHeader) : [];
+  const formsFormat = hasHeader && isFormsAvailabilityCSV(headers);
   const startIndex = hasHeader ? 1 : 0;
 
-  if(lines.length <= startIndex){
+  if(records.length <= startIndex){
     showStatus('import-status','The CSV has a header but no tutor rows. Add at least one tutor on the next line.','err');
     return;
   }
 
   let added = 0;
   let skipped = 0;
+  let merged = 0;
 
-  for(let i=startIndex;i<lines.length;i++){
-    const vals = parseCSVLine(lines[i]);
+  for(let i=startIndex;i<records.length && tutors.length<MAX_TUTOR_RECORDS;i++){
+    const vals = records[i];
     if(vals.every(v=>!v)) continue;
 
-    const parsed = parseManualCSVRow(vals, headers, hasHeader);
+    const parsed = formsFormat
+      ? parseFormsAvailabilityRow(vals, headers)
+      : parseManualCSVRow(vals, headers, hasHeader);
     const name = parsed.name;
 
     if(!name || name.length < 2){
@@ -275,8 +389,10 @@ function parseCSVText(text){
       continue;
     }
 
-    if(tutors.find(t=>t.name.toLowerCase()===name.toLowerCase())){
-      skipped++;
+    const duplicate = tutors.find(t=>(parsed.email && t.email && t.email.toLowerCase()===parsed.email.toLowerCase()) || t.name.toLowerCase()===name.toLowerCase());
+    if(duplicate){
+      mergeImportedTutor(duplicate, parsed);
+      merged++;
       continue;
     }
 
@@ -292,6 +408,7 @@ function parseCSVText(text){
       mode:parsed.mode,
       sat:parsed.sat,
       stable:parsed.stable,
+      notes:parsed.notes,
       avail:parsed.av,
       assignedHrs:0,
       assignments:[],
@@ -303,8 +420,11 @@ function parseCSVText(text){
   renderTutors();
 
   if(added>0){
-    showStatus('import-status',`Imported ${added} tutor${added>1?'s':''} from CSV. Switch to the Roster tab to review or add missing tutors.`,'ok');
+    const mergeMessage = merged ? ` Merged ${merged} repeated response${merged>1?'s':''}.` : '';
+    showStatus('import-status',`Imported ${added} tutor${added>1?'s':''} from CSV.${mergeMessage} Switch to the Roster tab to review or add missing tutors.`,'ok');
     setTimeout(()=>switchPane('tutors'), 1200);
+  } else if(merged>0){
+    showStatus('import-status',`Updated ${merged} existing tutor response${merged>1?'s':''} from CSV.`,'ok');
   } else {
     showStatus('import-status','No new tutors found. Check that each row starts with name and email, then includes hours/mode/Saturday and availability times.','err');
   }

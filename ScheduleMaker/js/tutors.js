@@ -52,7 +52,7 @@ function addTutor(){
   const stable = document.getElementById('t-stable').value;
   const priority = priorityEl.value;
 
-  tutors.push({id:Date.now(),name,email,phone,eng101,hrs,other,mode,sat,stable,priority,avail:av,assignedHrs:0,assignments:[],manual:true});
+  tutors.push({id:Date.now(),name,email,phone,notes:'',eng101,hrs,other,mode,sat,stable,priority,avail:av,assignedHrs:0,assignments:[],manual:true});
   renderTutors();
   document.getElementById('t-name').value='';
   document.getElementById('t-email').value='';

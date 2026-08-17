@@ -195,6 +195,8 @@ textarea:focus{outline:none;border-color:var(--red);box-shadow:0 0 0 3px rgba(17
 .avatar{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;flex-shrink:0}
 .tc-info{flex:1;min-width:0}
 .tc-name{font-size:14px;font-weight:800;display:flex;align-items:center;gap:6px}
+.tutor-notes-btn{display:inline-flex;align-items:center;gap:4px;margin-top:5px;padding:3px 8px;border:1px solid var(--line-s);border-radius:8px;background:#fff;color:var(--muted);font:700 10px var(--font);cursor:pointer;transition:background .12s,border-color .12s,color .12s}
+.tutor-notes-btn:hover{background:var(--cream);border-color:var(--red-b);color:var(--red-d)}
 .tc-meta{font-size:11px;color:var(--muted);margin-top:3px}
 .tag{display:inline-block;padding:2px 7px;border-radius:999px;font-size:10px;font-weight:700;margin:2px 2px 0 0}
 .tag.oc{background:#e6f1fb;color:#0c447c;border:1px solid #b5d4f4}
@@ -965,11 +967,16 @@ input:focus,select:focus{outline:none;border-color:var(--red);box-shadow:0 0 0 3
 @keyframes toastOut{to{opacity:0;transform:translateX(28px) scale(.94)}}
 
 /* ── Confirm modal ────────────────────────  */
-#confirm-overlay{position:fixed;inset:0;z-index:99998;background:rgba(30,22,20,.38);display:flex;align-items:center;justify-content:center;animation:fadeIn .15s ease}
+#confirm-overlay,#tutor-notes-overlay{position:fixed;inset:0;z-index:99998;background:rgba(30,22,20,.38);display:flex;align-items:center;justify-content:center;padding:20px;animation:fadeIn .15s ease}
 .confirm-box{background:#fff;border-radius:20px;padding:28px 28px 20px;max-width:400px;width:calc(100% - 40px);box-shadow:0 24px 64px rgba(30,22,20,.22);font-family:var(--font)}
 .confirm-box h4{font-size:16px;font-weight:800;margin-bottom:8px;color:var(--ink)}
 .confirm-box p{font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:20px}
 .confirm-actions{display:flex;gap:8px;justify-content:flex-end}
+.tutor-notes-box{background:#fff;border-radius:20px;padding:26px 28px 20px;max-width:520px;width:100%;box-shadow:0 24px 64px rgba(30,22,20,.22);font-family:var(--font)}
+.tutor-notes-box h4{font-size:16px;font-weight:800;margin-bottom:10px;color:var(--ink)}
+.tutor-notes-box p{font-size:13px;color:var(--ink);line-height:1.6;margin-bottom:20px;white-space:pre-wrap;overflow-wrap:anywhere;max-height:55vh;overflow:auto}
+.edit-notes-input{min-height:90px;resize:vertical;font-family:var(--font);font-size:13px;border:1px solid var(--line-s);border-radius:10px;padding:9px 11px;background:#fff;color:var(--ink);width:100%}
+.edit-notes-input:focus{outline:none;border-color:var(--red);box-shadow:0 0 0 3px rgba(176,58,46,.1)}
 
 
 
