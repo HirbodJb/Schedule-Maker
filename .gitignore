@@ -1,0 +1,41 @@
+# Secrets and local environment files
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.keystore
+id_rsa
+id_rsa.*
+id_ed25519
+id_ed25519.*
+credentials*.json
+secrets*.json
+service-account*.json
+
+# Private roster and scheduling exports
+*.csv
+saved-projects/
+exports/
+local-data/
+*.local.json
+*.project.json
+
+# Dependencies, builds, caches, and logs
+node_modules/
+dist/
+build/
+coverage/
+.netlify/
+*.log
+
+# Editor and operating-system files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*.swo
