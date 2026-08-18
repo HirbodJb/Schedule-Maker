@@ -86,39 +86,24 @@ function tutorClassCoverageInfo(tutor, cls){
   const classMins = endMins - startMins;
 
   const dayCoverages = cls.days.map(day => {
-    let bestStart = null;
-    let currentStart = null;
-    let currentMins = 0;
-    let bestMins = 0;
-    let totalOverlapMins = 0;
-    let availableSlots = 0;
-    let totalSlots = 0;
-
-    for(let m = startMins; m < endMins; m += 30){
-      totalSlots++;
-      const isAvailable = tutor.avail && tutor.avail[slotKeyFor(day, m)] === true;
-
-      if(isAvailable){
-        availableSlots++;
-        totalOverlapMins += 30;
-        if(currentStart === null) currentStart = m;
-        currentMins += 30;
-
-        if(currentMins > bestMins){
-          bestMins = currentMins;
-          bestStart = currentStart;
-        }
-      } else {
-        currentStart = null;
-        currentMins = 0;
-      }
-    }
+    const overlaps = typeof mergedTutorAvailabilityForDay === 'function'
+      ? mergedTutorAvailabilityForDay(tutor, day).map(interval => ({
+          start:Math.max(startMins, interval.start),
+          end:Math.min(endMins, interval.end)
+        })).filter(interval => interval.end > interval.start)
+      : [];
+    const best = overlaps.reduce((winner, interval) =>
+      !winner || interval.end - interval.start > winner.end - winner.start ? interval : winner, null);
+    const bestStart = best ? best.start : null;
+    const bestMins = best ? best.end - best.start : 0;
+    const totalOverlapMins = overlaps.reduce((sum, interval) => sum + interval.end - interval.start, 0);
+    const fullCoverage = overlaps.some(interval => interval.start <= startMins && interval.end >= endMins);
 
     return {
       day,
       coverageMins: bestMins,
       totalOverlapMins,
-      fullCoverage: totalSlots > 0 && availableSlots === totalSlots,
+      fullCoverage,
       startMins: bestStart,
       endMins: bestStart === null ? null : bestStart + bestMins
     };
@@ -2274,6 +2259,49 @@ function classHasSaturday(cls){
   return days.includes('Saturday');
 }
 
+function tutorAvailableIntervalsForDay(tutor, day){
+  if(!tutor || !tutor.avail || !day) return [];
+  const prefix = `${day}-`;
+  return Object.entries(tutor.avail)
+    .filter(([key,available]) => available === true && key.startsWith(prefix))
+    .map(([key]) => {
+      const time = key.slice(prefix.length);
+      if(!/^\d{1,2}:\d{2}$/.test(time)) return null;
+      const start = timeToMins(time);
+      return {start, end:start + 30};
+    })
+    .filter(Boolean)
+    .sort((a,b) => a.start - b.start);
+}
+
+function mergedTutorAvailabilityForDay(tutor, day){
+  const merged = [];
+  tutorAvailableIntervalsForDay(tutor, day).forEach(interval => {
+    const last = merged[merged.length - 1];
+    if(last && interval.start <= last.end){
+      last.end = Math.max(last.end, interval.end);
+    } else {
+      merged.push({...interval});
+    }
+  });
+  return merged;
+}
+
+function tutorContinuousAvailabilityOverlapMins(tutor, day, start, end){
+  if(end <= start) return 0;
+  return mergedTutorAvailabilityForDay(tutor, day).reduce((best, interval) => {
+    const overlap = Math.max(0, Math.min(end, interval.end) - Math.max(start, interval.start));
+    return Math.max(best, overlap);
+  }, 0);
+}
+
+function tutorAvailabilityCoversInterval(tutor, day, startTime, endTime){
+  const start = timeToMins(startTime);
+  const end = timeToMins(endTime);
+  if(!startTime || !endTime || end <= start) return false;
+  return mergedTutorAvailabilityForDay(tutor, day).some(interval => interval.start <= start && interval.end >= end);
+}
+
 function tutorHasOneHourClassOverlap(tutor, cls){
   if(!tutor || !cls) return false;
 
@@ -2287,32 +2315,19 @@ function tutorHasOneHourClassOverlap(tutor, cls){
   const end = timeToMins(cls.endTime);
   if(end <= start) return true;
 
-  // Saturday-only classes use the roster Saturday flag because the weekly
-  // availability grid does not store Saturday time slots.
-  if(classIsSaturdayOnly(cls)) return tutorHasSaturdayRosterAvailability(tutor);
-
-  // If Saturday is one of several class days, require the Saturday flag for
-  // Saturday coverage, but still allow weekday overlap to decide if they can
-  // take the weekday portion.
-  if(classHasSaturday(cls) && !tutorHasSaturdayRosterAvailability(tutor)) return false;
+  // Saturday has a roster-level availability flag rather than timed cells.
+  // For a mixed weekday/Saturday class, availability on any meeting day is
+  // enough to show the tutor because the user chooses which days they attend.
+  if(days.includes('Saturday') && tutorHasSaturdayRosterAvailability(tutor)) return true;
 
   const weekdayDays = days.filter(d => d !== 'Saturday');
   if(!weekdayDays.length) return tutorHasSaturdayRosterAvailability(tutor);
 
-  // Need at least 2 consecutive available 30-minute slots within the class.
-  for(const day of weekdayDays){
-    let consecutive = 0;
-    for(let m = start; m < end; m += 30){
-      const key = slotKeyFor(day, m);
-      if(tutor.avail && tutor.avail[key] === true){
-        consecutive += 30;
-        if(consecutive >= 60) return true;
-      } else {
-        consecutive = 0;
-      }
-    }
-  }
-  return false;
+  // Availability is stored on a half-hour grid, while imported CET classes
+  // may begin at any minute (for example 11:10am). Intersect the real class
+  // window with merged availability intervals instead of looking for keys such
+  // as "11:10" that can never exist in the roster grid.
+  return weekdayDays.some(day => tutorContinuousAvailabilityOverlapMins(tutor, day, start, end) >= 60);
 }
 
 function tutorEligibleForCETClassDropdown(tutor, cls){
@@ -2486,14 +2501,8 @@ function updateCETAssignPreview(classId){
         return false;
       });
       if(busy.length) notes.push(`This tutor already has a CET block overlapping on: ${busy.join(', ')}.`);
-      const missing = [];
-      draft.days.forEach(day => {
-        if(!cetDayUsesAvailabilityGrid(day)) return;
-        for(let m = timeToMins(draft.startTime); m < timeToMins(draft.endTime); m += 30){
-          const key = slotKeyFor(day, m);
-          if(!(tutor.avail && tutor.avail[key] === true)) missing.push(`${day} ${minsToTimeLabel(m)}`);
-        }
-      });
+      const missing = draft.days.filter(day => cetDayUsesAvailabilityGrid(day)
+        && !tutorAvailabilityCoversInterval(tutor, day, draft.startTime, draft.endTime));
       if(missing.length) notes.push(`Availability warning: ${cetEsc(tutor.name)} is not marked available for every selected slot. You can still assign if this is intentional.`);
     }
   }
@@ -2564,14 +2573,8 @@ function saveCETAssignment(classId){
 
   if(!isAsync){
     const warnings = [];
-    const missing = [];
-    draft.days.forEach(day => {
-      if(!cetDayUsesAvailabilityGrid(day)) return;
-      for(let m = timeToMins(draft.startTime); m < timeToMins(draft.endTime); m += 30){
-        const key = slotKeyFor(day, m);
-        if(!(tutor.avail && tutor.avail[key] === true)) missing.push(`${day} ${minsToTimeLabel(m)}`);
-      }
-    });
+    const missing = draft.days.filter(day => cetDayUsesAvailabilityGrid(day)
+      && !tutorAvailabilityCoversInterval(tutor, day, draft.startTime, draft.endTime));
     if(missing.length) warnings.push(`${tutor.name} is not marked available for every selected CET slot.`);
     const overlaps = [];
     draft.days.forEach(day => {

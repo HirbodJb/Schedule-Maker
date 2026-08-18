@@ -86,6 +86,26 @@ if(restored.assignments[0].tutorId !== tutors[0].id) throw new Error('CET tutor 
 if(restored.assignments[0].sgPlacement?.day !== 'Tuesday') throw new Error('Manual SG day did not restore');
 if(restored.assignments[0].sgPlacement?.startTime !== '11:00') throw new Error('Manual SG time did not restore');
 if(restored.assignments[0].sgPlacement?.manual !== true) throw new Error('Manual SG flag did not restore');
+
+const offGridClass = {
+  modality:'online-live', days:['Monday','Wednesday'], startTime:'11:10', endTime:'12:35'
+};
+const offGridTutor = {
+  id:77, hrs:15, sat:false,
+  avail:{
+    'Monday-11:00':true, 'Monday-11:30':true,
+    'Monday-12:00':true, 'Monday-12:30':true
+  }
+};
+if(!tutorHasOneHourClassOverlap(offGridTutor, offGridClass)) throw new Error('Off-grid CET time did not match continuous tutor availability');
+if(!tutorEligibleForCETClassDropdown(offGridTutor, offGridClass)) throw new Error('Eligible off-grid tutor did not appear in the CET dropdown');
+if(!tutorAvailabilityCoversInterval(offGridTutor, 'Monday', '11:10', '12:35')) throw new Error('Off-grid assignment coverage was reported missing');
+
+const fiftyMinuteTutor = {sat:false,avail:{'Monday-11:00':true,'Monday-11:30':true}};
+if(tutorHasOneHourClassOverlap(fiftyMinuteTutor, offGridClass)) throw new Error('Less than one real hour was treated as eligible');
+
+const mixedSaturdayClass = {modality:'in-person',days:['Monday','Saturday'],startTime:'11:10',endTime:'12:35'};
+if(!tutorHasOneHourClassOverlap(offGridTutor, mixedSaturdayClass)) throw new Error('Mixed Saturday class incorrectly required Saturday availability');
 console.log('Project CET round-trip passed: 1 tutor, 1 CET class, 1 CET assignment.');
 `;
 
