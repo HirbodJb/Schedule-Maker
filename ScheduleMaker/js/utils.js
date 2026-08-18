@@ -171,6 +171,7 @@ function buildAppSnapshot(){
       time:s.time,
       assignedIds:s.assigned.map(t=>t.id)
     })),
+    cetState:typeof exportCETState === 'function' ? exportCETState() : {cetClasses:[]},
     selectedShift:selectedShift ? {...selectedShift} : null,
     moveMode:moveMode ? {...moveMode} : null,
     showAllGaps,
@@ -201,6 +202,9 @@ function restoreAppSnapshot(snapshot){
     assigned:(s.assignedIds||[]).map(id=>tutorById.get(String(id))).filter(Boolean)
   }));
 
+  if(typeof importCETState === 'function') importCETState(snapshot.cetState || {cetClasses:[]});
+  cetFocusedTutorId=null;
+
   tutors.forEach(t=>{ t.assignments=[]; t.assignedHrs=0; });
   currentSlots.forEach(slot=>{
     slot.assigned.forEach(t=>{
@@ -224,6 +228,7 @@ function restoreAppSnapshot(snapshot){
 
   closeShiftPopover();
   renderTutors();
+  if(typeof renderCET === 'function') renderCET();
   if(currentSlots.length){
     renderOutput(currentSlots);
     updateScheduleStats(); paintUncoveredCells();
@@ -274,8 +279,8 @@ function clearUndoState(){
 
 
 function saveProject(){
-  if(!tutors.length){
-    showToast('Add or import tutors before saving a project.', 'warn');
+  if(!tutors.length && !cetClasses.length){
+    showToast('Add or import tutors or CET classes before saving a project.', 'warn');
     return;
   }
   openSaveProjectModal();
@@ -421,24 +426,27 @@ function handleProjectFile(input){
       const snapshot = normalizeProjectSnapshot(rawSnapshot);
 
       const doLoad = () => {
-        if(tutors.length || currentSlots.length){
+        if(tutors.length || currentSlots.length || cetClasses.length){
           saveUndoState('loaded project');
         }
 
         // Saved project files should reopen directly on the Schedule page when a schedule exists.
-        snapshot.activePane = (snapshot.slots && snapshot.slots.length) ? 'generate' : 'tutors';
+        snapshot.activePane = (snapshot.slots && snapshot.slots.length)
+          ? 'generate'
+          : (snapshot.cetState && snapshot.cetState.cetClasses.length ? 'cet' : 'tutors');
         restoreAppSnapshot(snapshot);
         resetRosterSearchResults();
         resetScheduleSearchResults();
         closeShiftPopover();
         const loadedName = payload && payload.projectName ? `“${escapeHtml(payload.projectName)}” — ` : '';
-        showToast(`Loaded project: ${loadedName}${snapshot.tutors.length} tutor${snapshot.tutors.length===1?'':'s'}${snapshot.slots&&snapshot.slots.length?' with a saved schedule':''}.`, 'ok', 3600);
+        const cetCount = snapshot.cetState ? snapshot.cetState.cetClasses.length : 0;
+        showToast(`Loaded project: ${loadedName}${snapshot.tutors.length} tutor${snapshot.tutors.length===1?'':'s'} · ${cetCount} CET class${cetCount===1?'':'es'}${snapshot.slots&&snapshot.slots.length?' · saved schedule restored':''}.`, 'ok', 4200);
       };
 
-      if(tutors.length || currentSlots.length){
+      if(tutors.length || currentSlots.length || cetClasses.length){
         showConfirm(
           'Load saved project?',
-          'Loading this project will replace the current roster and schedule. You can use the Undo button to return to the previous version right after loading.',
+          'Loading this project will replace the current roster, CET classes, and schedule. You can use the Undo button to return to the previous version right after loading.',
           doLoad,
           'Load project',
           'btn-red'

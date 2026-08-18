@@ -108,10 +108,10 @@ function cancelAddTutor(){
 function clearAll(){
   showConfirm(
     'Clear everything?',
-    'This will delete all tutors and the current schedule. This cannot be undone.',
+    'This will delete all tutors, CET classes, and the current schedule. This cannot be undone.',
     ()=>{
       saveUndoState('clear all');
-      tutors=[]; currentSlots=[]; selectedShift=null; moveMode=null; focusedTutorId=null; showAllGaps=false; currentAnalysisReportText=''; currentAnalysisReportHTML=''; analysisPanelOpen=false;
+      tutors=[]; currentSlots=[]; cetClasses=[]; cetFocusedTutorId=null; selectedShift=null; moveMode=null; focusedTutorId=null; showAllGaps=false; currentAnalysisReportText=''; currentAnalysisReportHTML=''; analysisPanelOpen=false;
   addHoursMode=null; moveMode=null; selectedShift=null; resetRosterSearchResults(); resetScheduleSearchResults();
       closeShiftPopover();
       document.getElementById('gen-out').innerHTML='';
@@ -123,6 +123,7 @@ function clearAll(){
       document.getElementById('csv-paste').value='';
       document.getElementById('csv-file').value='';
       renderTutors();
+      if(typeof renderCET === 'function') renderCET();
       switchPane('upload');
     },
     'Clear everything'

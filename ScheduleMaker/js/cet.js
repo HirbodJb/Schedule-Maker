@@ -1706,7 +1706,17 @@ function parseCETRequestCSVText(text){
 
 function exportCETState(){
   normalizeAllCETClasses();
-  return { cetClasses };
+  return {
+    cetClasses:cetClasses.map(cls=>({
+      ...cls,
+      days:Array.isArray(cls.days) ? [...cls.days] : [],
+      assignments:(Array.isArray(cls.assignments) ? cls.assignments : []).map(assignment=>({
+        ...assignment,
+        days:Array.isArray(assignment.days) ? [...assignment.days] : [],
+        sgPlacement:assignment.sgPlacement ? {...assignment.sgPlacement} : null
+      }))
+    }))
+  };
 }
 
 function importCETState(data){
