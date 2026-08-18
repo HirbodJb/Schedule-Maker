@@ -1553,8 +1553,11 @@ function openManualSGModal(classId, assignmentId){
   const days = typeof activeScheduleDays === 'function' ? activeScheduleDays() : ALL_DAYS;
   const selectedDay = days.includes(saved.day) ? saved.day : '';
   const selectedStart = selectedDay && manualSGStartTimesForDay(selectedDay).includes(saved.startTime) ? saved.startTime : '';
-  const classTime = cls.modality === 'async'
-    ? 'Asynchronous class (no fixed meeting time)'
+  const assignedCETTime = assignment.asyncCoursework || cls.modality === 'async'
+    ? 'Asynchronous coursework (no fixed assigned meeting time)'
+    : `${(assignment.days || []).join(', ') || 'Day TBD'} · ${assignment.startTime && assignment.endTime ? `${fmtTime(assignment.startTime)}–${fmtTime(assignment.endTime)}` : 'time TBD'}`;
+  const fullClassTime = cls.modality === 'async'
+    ? 'Asynchronous class (no fixed class meeting time)'
     : `${(cls.days || []).join(', ') || 'Day TBD'} · ${cls.startTime && cls.endTime ? `${fmtTime(cls.startTime)}–${fmtTime(cls.endTime)}` : 'time TBD'}`;
   const hoursNote = typeof semesterOperatingNote === 'function' ? semesterOperatingNote() : 'Choose a time inside operating hours.';
 
@@ -1564,7 +1567,11 @@ function openManualSGModal(classId, assignmentId){
   ov.innerHTML = `<div class="cet-modal cet-manual-sg-modal" role="dialog" aria-modal="true" aria-labelledby="manual-sg-title">
     <div class="cet-modal-header"><h3 id="manual-sg-title">Set study group time</h3><button class="cet-modal-close" onclick="closeManualSGModal()" aria-label="Close">&times;</button></div>
     <div class="cet-modal-body">
-      <div class="cet-study-note" style="margin-top:0"><strong>${cetEsc(tutor.name)}</strong> · ${cetEsc(cls.title || 'CET class')}<br><span>${cetEsc(classTime)}</span></div>
+      <div class="cet-study-note cet-manual-sg-summary" style="margin-top:0">
+        <strong>${cetEsc(tutor.name)}</strong> · ${cetEsc(cls.title || 'CET class')}
+        <span><strong>Tutor’s assigned CET time:</strong> ${cetEsc(assignedCETTime)}</span>
+        <span><strong>Full class meeting time — do not overlap:</strong> ${cetEsc(fullClassTime)}</span>
+      </div>
       <div class="cet-manual-sg-rules"><strong>Scheduling rules</strong><span>${cetEsc(hoursNote)}</span><span>The study group is exactly 1 hour, must be within operating hours, and cannot overlap the CET class or another responsibility.</span></div>
       <div class="form-grid two" style="margin-top:14px">
         <div class="fg"><span class="fl">Study group day</span><select id="manual-sg-day" onchange="updateManualSGTimeOptions(${JSON.stringify(cls.id)}, ${JSON.stringify(assignment.id)})"><option value="">— Select day —</option>${days.map(day => `<option value="${day}" ${day===selectedDay?'selected':''}>${day}</option>`).join('')}</select></div>

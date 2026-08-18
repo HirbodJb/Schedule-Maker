@@ -414,6 +414,15 @@
 .cet-sg-action:hover{background:#fff}
 .cet-sg-action-warning{color:var(--warn)}
 .cet-manual-sg-modal{max-width:590px}
+.cet-manual-sg-summary{
+  display:flex;
+  flex-direction:column;
+  gap:4px;
+  line-height:1.45;
+}
+.cet-manual-sg-summary>strong:first-child{margin-bottom:2px}
+.cet-manual-sg-summary span{display:block}
+.cet-manual-sg-summary span strong{color:var(--ink)}
 .cet-manual-sg-rules{
   display:flex;
   flex-direction:column;
