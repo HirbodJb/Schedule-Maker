@@ -2360,7 +2360,14 @@ function openCETAssignModal(classId){
   ov.innerHTML = `<div class="cet-modal cet-assign-modal" role="dialog" aria-modal="true">
     <div class="cet-modal-header"><h3>Add CET tutor block</h3><button class="cet-modal-close" onclick="closeCETAssignModal()">&times;</button></div>
     <div class="cet-modal-body">
-      <div class="cet-study-note" style="margin-top:0">${cetEsc(cls.title || 'This class')} · ${isAsync ? 'asynchronous class: choose the tutor and, if needed, the manual SG time.' : 'choose exactly which days and times this tutor will attend.'}</div>
+      <div class="cet-study-note cet-assign-class-summary" style="margin-top:0">
+        <strong>${cetEsc(cls.title || 'This class')}</strong>
+        <span class="cet-assign-class-meta">
+          ${isAsync
+            ? `<span><i class="ti ti-clock-off"></i> Asynchronous · no fixed meeting time</span>`
+            : `<span><i class="ti ti-calendar"></i> ${cetEsc((cls.days || []).map(day=>day.slice(0,3)).join(', ') || 'Days TBD')}</span><span><i class="ti ti-clock"></i> ${cetEsc(cls.startTime && cls.endTime ? `${fmtTime(cls.startTime)}–${fmtTime(cls.endTime)}` : 'Time TBD')}</span>`}
+        </span>
+      </div>
       <div class="form-grid two" style="margin-top:12px">
         <div class="fg"><span class="fl">Tutor</span><select id="ca-tutor" onchange="updateCETAssignPreview(${cls.id})">
           <option value="">— Select tutor —</option>

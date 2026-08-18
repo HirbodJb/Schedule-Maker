@@ -423,6 +423,27 @@
 .cet-manual-sg-summary>strong:first-child{margin-bottom:2px}
 .cet-manual-sg-summary span{display:block}
 .cet-manual-sg-summary span strong{color:var(--ink)}
+.cet-assign-class-summary{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  line-height:1.35;
+}
+.cet-assign-class-summary>strong{color:var(--ink)}
+.cet-assign-class-meta{display:flex;align-items:center;flex-wrap:wrap;gap:6px}
+.cet-assign-class-meta>span{
+  display:inline-flex;
+  align-items:center;
+  gap:4px;
+  white-space:nowrap;
+  color:var(--muted);
+  font-size:11px;
+  font-weight:750;
+}
+@media(max-width:620px){
+  .cet-assign-class-summary{align-items:flex-start;flex-direction:column}
+}
 .cet-manual-sg-rules{
   display:flex;
   flex-direction:column;
