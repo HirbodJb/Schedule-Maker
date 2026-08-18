@@ -902,6 +902,29 @@ function renderOutput(slots){
 
 
 // ── Export schedule ──────────────────────────────────────
+function scheduleExportPlainText(value){
+  return String(value || '')
+    .replace(/[\u2010-\u2015]/g, '-')
+    .replace(/\u00b7/g, '-')
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/[\u201c\u201d]/g, '"');
+}
+
+function scheduleExportEntryLabel(entry, day){
+  if(!entry) return '';
+  const name = scheduleExportPlainText(entry.name);
+  if(entry._type === 'sg'){
+    const title = scheduleExportPlainText(entry._sgTitle);
+    return `SG: ${name}${title ? ` - ${title}` : ''}`;
+  }
+  if(entry._type === 'cet-display'){
+    const title = scheduleExportPlainText(entry._cetTitle);
+    return `CET: ${name}${title ? ` - ${title}` : ''}`;
+  }
+  const mode = displayModeShortForDay(entry, day);
+  return `${name} ${mode}`.trim();
+}
+
 function scheduleExportRows(){
   const rows = [];
   const days = activeScheduleDays();
@@ -910,18 +933,21 @@ function scheduleExportRows(){
   rows.push(header);
 
   times.forEach(time => {
-    const row = [fmtInterval(time)];
+    const row = [scheduleExportPlainText(fmtInterval(time))];
     days.forEach(day => {
       const slot = getSlot(day,time);
-      if(!slot || !slot.assigned.length){
+      const scheduledEntries = slot && Array.isArray(slot.assigned) ? slot.assigned : [];
+      const cetEntries = typeof getCETDisplayBlocksForSlot === 'function'
+        ? getCETDisplayBlocksForSlot(day, time)
+        : [];
+      const entries = [...scheduledEntries, ...cetEntries];
+
+      if(!entries.length){
         row.push('');
         return;
       }
 
-      const names = slot.assigned.map(t => {
-        const mode = displayModeShortForDay(t, day);
-        return `${t.name} ${mode}`;
-      }).join(' | ');
+      const names = entries.map(entry => scheduleExportEntryLabel(entry, day)).filter(Boolean).join(' | ');
 
       row.push(names);
     });
@@ -944,13 +970,6 @@ function exportScheduleExcel(){
     <html>
       <head>
         <meta charset="UTF-8">
-        <meta name="application-name" content="ESL Schedule Builder">
-        <meta name="author" content="Hirbod Jabbarnezhad">
-        <meta name="creator" content="Hirbod Jabbarnezhad">
-        <meta name="software" content="ESL Schedule Builder">
-        <meta name="version" content="1.0">
-        <meta name="copyright" content="Copyright (c) 2026 Hirbod Jabbarnezhad">
-        ${metadataComment()}
         <style>
           table{border-collapse:collapse;font-family:Arial,sans-serif;font-size:12px}
           th{background:#b03a2e;color:#fff;font-weight:bold}
@@ -959,9 +978,8 @@ function exportScheduleExcel(){
         </style>
       </head>
       <body>
-        ${metadataHiddenBlock()}
         <h2>ESL Weekly Schedule</h2>
-        <p><strong>Schedule period:</strong> ${esc(schedulePeriodText())}${scheduleSettings.weeklyBudget?` · <strong>Weekly budget:</strong> ${scheduleSettings.weeklyBudget.toFixed(1)} hours`:''}</p>
+        <p><strong>Schedule period:</strong> ${esc(scheduleExportPlainText(schedulePeriodText()))}${scheduleSettings.weeklyBudget?` - <strong>Weekly budget:</strong> ${scheduleSettings.weeklyBudget.toFixed(1)} hours`:''}</p>
         <table>
   `;
 
@@ -994,8 +1012,6 @@ function exportSchedulePDF(){
   }
 
   const rows = scheduleExportRows();
-  const metadata = appMetadata();
-
   // Use jsPDF instead of window.print(). Browser-print PDFs are made by Chrome/Skia
   // and usually ignore custom Author/Creator fields. jsPDF lets us write real PDF metadata.
   const jspdfNamespace = window.jspdf || window.jsPDF;
@@ -1014,17 +1030,8 @@ function exportSchedulePDF(){
 
   doc.setProperties({
     title:'ESL Weekly Schedule',
-    subject:'ESL Tutor Scheduling',
-    author:metadata.createdBy,
-    keywords:`${metadata.software}, ${metadata.createdBy}, ESL, scheduling, version ${metadata.version}, ${metadata.copyright}`,
-    creator:metadata.software
+    subject:'ESL Tutor Scheduling'
   });
-
-  // Extra embedded authorship note. This is invisible on the page but searchable in the PDF text layer.
-  doc.setFontSize(1);
-  doc.setTextColor(255,255,255);
-  doc.text(`Metadata: ${JSON.stringify(metadata)}`, 8, 8);
-  doc.setTextColor(30,22,20);
 
   doc.setFont('helvetica','bold');
   doc.setFontSize(18);
@@ -1033,8 +1040,7 @@ function exportSchedulePDF(){
   doc.setFont('helvetica','normal');
   doc.setFontSize(10);
   doc.text('Tutor and class scheduling tool', 40, 58);
-  doc.text(`${metadata.software} v${metadata.version}`, 40, 73);
-  doc.text(`Period: ${schedulePeriodText()}${scheduleSettings.weeklyBudget?` · Weekly budget: ${scheduleSettings.weeklyBudget.toFixed(1)} hours`:''}`, 40, 88);
+  doc.text(`Period: ${scheduleExportPlainText(schedulePeriodText())}${scheduleSettings.weeklyBudget?` - Weekly budget: ${scheduleSettings.weeklyBudget.toFixed(1)} hours`:''}`, 40, 73);
 
   const head = [rows[0]];
   const body = rows.slice(1);
@@ -1042,7 +1048,7 @@ function exportSchedulePDF(){
   doc.autoTable({
     head,
     body,
-    startY:104,
+    startY:89,
     theme:'grid',
     styles:{
       font:'helvetica',
@@ -1067,12 +1073,11 @@ function exportSchedulePDF(){
         textColor:[30,22,20]
       }
     },
-    margin:{top:104,right:28,bottom:34,left:28},
+    margin:{top:89,right:28,bottom:34,left:28},
     didDrawPage:function(data){
       const pageCount = doc.internal.getNumberOfPages();
       doc.setFontSize(8);
       doc.setTextColor(120,105,101);
-      doc.text(`${metadata.software} · Created by ${metadata.createdBy}`, data.settings.margin.left, doc.internal.pageSize.height - 16);
       doc.text(`Page ${data.pageNumber} of ${pageCount}`, doc.internal.pageSize.width - 80, doc.internal.pageSize.height - 16);
       doc.setTextColor(30,22,20);
     }

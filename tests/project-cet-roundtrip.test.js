@@ -9,6 +9,7 @@ const source = [
   'ScheduleMaker/js/security.js',
   'ScheduleMaker/js/utils.js',
   'ScheduleMaker/js/tutors.js',
+  'ScheduleMaker/js/schedule.js',
   'ScheduleMaker/js/cet.js'
 ].map(file=>fs.readFileSync(path.join(root, file), 'utf8')).join('\n');
 
@@ -28,7 +29,7 @@ const context = {
   URL,
   setTimeout(callback){ callback(); return 1; },
   clearTimeout(){},
-  window:{innerWidth:1280,innerHeight:800},
+  window:{innerWidth:1280,innerHeight:800,addEventListener(){}},
   document:{
     addEventListener(){},
     querySelector(){return null;},
@@ -106,6 +107,31 @@ if(tutorHasOneHourClassOverlap(fiftyMinuteTutor, offGridClass)) throw new Error(
 
 const mixedSaturdayClass = {modality:'in-person',days:['Monday','Saturday'],startTime:'11:10',endTime:'12:35'};
 if(!tutorHasOneHourClassOverlap(offGridTutor, mixedSaturdayClass)) throw new Error('Mixed Saturday class incorrectly required Saturday availability');
+
+tutors = [
+  {id:1,name:'Regular Tutor',mode:'oc',avail:{},hrs:10,assignedHrs:0,assignments:[]},
+  {id:2,name:'CET Tutor',mode:'both',avail:{},hrs:10,assignedHrs:0,assignments:[]},
+  {id:3,name:'SG Tutor',mode:'both',avail:{},hrs:10,assignedHrs:0,assignments:[]}
+];
+currentSlots = [{
+  day:'Monday',time:'11:00',assigned:[
+    tutors[0],
+    {...tutors[2],_type:'sg',_sgTitle:'ESL Study Group'}
+  ]
+}];
+cetClasses = [{
+  id:301,title:'ESL CET Class',professor:'Professor',modality:'online-live',
+  days:['Monday'],startTime:'11:10',endTime:'12:35',hrsPerWeek:2,
+  wantsCET:true,requiresStudyGroup:false,assignments:[{
+    id:302,tutorId:2,days:['Monday'],startTime:'11:10',endTime:'12:35',weeklyHours:1
+  }]
+}];
+const exportRows = scheduleExportRows();
+const elevenRow = exportRows.find(row => row[0] === scheduleExportPlainText(fmtInterval('11:00')));
+const mondayExport = elevenRow && elevenRow[1];
+if(!mondayExport || !mondayExport.includes('Regular Tutor OC')) throw new Error('Regular assignment missing from export');
+if(!mondayExport.includes('SG: SG Tutor - ESL Study Group')) throw new Error('Study group missing from export');
+if(!mondayExport.includes('CET: CET Tutor - ESL CET Class')) throw new Error('CET assignment missing from export');
 console.log('Project CET round-trip passed: 1 tutor, 1 CET class, 1 CET assignment.');
 `;
 
