@@ -1036,7 +1036,7 @@ function findScheduledSGPlacementForAssignment(cls, assignment){
         && String(tt.id) === String(assignment.tutorId)
         && (String(tt._sgAssignmentId) === String(assignment.id)
           || (String(tt._sgClassId) === String(cls.id)))){
-        matches.push({day:slot.day, time:slot.time});
+        matches.push({day:slot.day, time:slot.time, manual:tt._sgManual === true});
       }
     });
   });
@@ -1057,7 +1057,8 @@ function findScheduledSGPlacementForAssignment(cls, assignment){
     day: first.day,
     startTime: sameDay[0].time,
     endTime: minsToScheduleTime(endMins),
-    weeklyHours: 1
+    weeklyHours: 1,
+    manual: sameDay.some(x => x.manual === true)
   };
 }
 
@@ -1080,7 +1081,6 @@ function syncCETStudyGroupStatusFromSchedule(){
 function isCETStudyGroupResolved(cls, assignment){
   if(!assignmentNeedsStudyGroup(cls, assignment)) return true;
   if(assignment.sgStatus === 'scheduled' && assignment.sgPlacement) return true;
-  if(assignment.sgPlacement && assignment.sgPlacement.day && assignment.sgPlacement.startTime && assignment.sgPlacement.endTime) return true;
 
   const found = findScheduledSGPlacementForAssignment(cls, assignment);
   if(found){
@@ -1262,7 +1262,7 @@ function renderClassCard(cls){
         const c = cetColorFor(tutor.id);
         html += `<div class="cet-assignment-pill" style="background:${c.bg};color:${c.text};border:1.5px solid ${c.border}">
           <div class="avatar" style="background:${c.bg};color:${c.text};width:22px;height:22px;font-size:9px;flex-shrink:0">${cetEsc(initials(tutor.name))}</div>
-          <div class="cet-assignment-info"><strong>${cetEsc(tutor.name)}</strong><span>${cetAssignmentTimeLabel(a)} · ${formatCETHours(a.weeklyHours)}/wk</span>${assignmentNeedsStudyGroup(cls,a) ? (isCETStudyGroupResolved(cls,a) && a.sgPlacement ? `<span class="cet-sg-ok">✓ SG placed ${a.sgPlacement.day.slice(0,3)} · ${fmtTime(a.sgPlacement.startTime)}–${fmtTime(a.sgPlacement.endTime)} · change manually if needed</span>` : `<span class="cet-sg-warning">⚠ SG needs manual time</span>`) : ''}</div>
+          <div class="cet-assignment-info"><strong>${cetEsc(tutor.name)}</strong><span>${cetAssignmentTimeLabel(a)} · ${formatCETHours(a.weeklyHours)}/wk</span>${assignmentNeedsStudyGroup(cls,a) ? (isCETStudyGroupResolved(cls,a) && a.sgPlacement ? `<span class="cet-sg-ok">✓ SG placed ${a.sgPlacement.day.slice(0,3)} · ${fmtTime(a.sgPlacement.startTime)}–${fmtTime(a.sgPlacement.endTime)}</span><button class="cet-sg-action" onclick="event.stopPropagation();openManualSGModal(${JSON.stringify(cls.id)}, ${JSON.stringify(a.id)})">Change SG</button>` : `<span class="cet-sg-warning">⚠ SG needs manual time</span><button class="cet-sg-action cet-sg-action-warning" onclick="event.stopPropagation();openManualSGModal(${JSON.stringify(cls.id)}, ${JSON.stringify(a.id)})">Set SG time</button>`) : ''}</div>
           <button class="cet-pill-remove" onclick="removeCETAssignment(${cls.id}, ${a.id})" title="Remove this tutor"><i class="ti ti-x"></i></button>
         </div>`;
       });
@@ -1447,6 +1447,201 @@ function saveCETAssignment(classId){
     return;
   }
   addNow();
+}
+
+
+// ── Manual study-group placement for any CET assignment ─────
+function closeManualSGModal(){
+  document.getElementById('manual-sg-overlay')?.remove();
+}
+
+function manualSGStartTimesForDay(day){
+  const times = typeof timesForDay === 'function' ? timesForDay(day) : [];
+  return times.filter(time => times.includes(minsToScheduleTime(timeToMins(time) + 30)));
+}
+
+function manualSGTimeOptions(day, selected=''){
+  const times = manualSGStartTimesForDay(day);
+  return `<option value="">— Select start time —</option>${times.map(time =>
+    `<option value="${time}" ${time===selected?'selected':''}>${fmtTime(time)} – ${fmtTime(oneHourEndTime(time))}</option>`
+  ).join('')}`;
+}
+
+function updateManualSGTimeOptions(classId, assignmentId, keepSelection=false){
+  const day = document.getElementById('manual-sg-day')?.value || '';
+  const timeEl = document.getElementById('manual-sg-start');
+  if(!timeEl) return;
+  const selected = keepSelection ? timeEl.value : '';
+  timeEl.innerHTML = manualSGTimeOptions(day, selected);
+  updateManualSGPreview(classId, assignmentId);
+}
+
+function manualSGCurrentSlotConflict(tutorId, day, startTime, classId, assignmentId){
+  if(!Array.isArray(currentSlots) || !currentSlots.length) return false;
+  const blockTimes = [startTime, minsToScheduleTime(timeToMins(startTime) + 30)];
+  return blockTimes.some(time => {
+    const slot = currentSlots.find(s => s.day === day && s.time === time);
+    return !!(slot && Array.isArray(slot.assigned) && slot.assigned.some(entry => {
+      if(String(entry.id) !== String(tutorId)) return false;
+      const ownSG = entry._type === 'sg'
+        && String(entry._sgClassId) === String(classId)
+        && String(entry._sgAssignmentId) === String(assignmentId);
+      // Ordinary tutoring coverage can be replaced by the required SG when the
+      // user saves. Another SG remains a hard conflict.
+      return entry._type === 'sg' && !ownSG;
+    }));
+  });
+}
+
+function validateManualSGChoice(cls, assignment, tutor, day, startTime){
+  const errors = [];
+  if(!day || !startTime) return ['Choose a day and a 1-hour start time.'];
+  if(!isOneHourBlockInsideOperatingHours(day, startTime)){
+    errors.push('The study group must be a full hour inside the selected semester’s operating hours.');
+  }
+  if(typeof studyGroupBlockOverlapsClassMeeting === 'function' && studyGroupBlockOverlapsClassMeeting(cls, day, startTime)){
+    errors.push('The study group cannot overlap the full CET class meeting time.');
+  }
+  if(!tutorAvailableForOneHourBlock(tutor, day, startTime)){
+    errors.push(`${tutor.name} is not marked available for the full selected hour.`);
+  }
+  const blockTimes = [startTime, minsToScheduleTime(timeToMins(startTime) + 30)];
+  if(typeof isTutorBusyWithCETExcept === 'function' && blockTimes.some(time =>
+    isTutorBusyWithCETExcept(tutor, day, time, cls.id, assignment.id)
+  )){
+    errors.push('This time overlaps another CET class or study group assigned to this tutor.');
+  }
+  if(manualSGCurrentSlotConflict(tutor.id, day, startTime, cls.id, assignment.id)){
+    errors.push('This tutor already has another study group during that hour.');
+  }
+  return [...new Set(errors)];
+}
+
+function updateManualSGPreview(classId, assignmentId){
+  const cls = cetClasses.find(c => String(c.id) === String(classId));
+  const assignment = cls && (cls.assignments || []).find(a => String(a.id) === String(assignmentId));
+  const tutor = assignment && tutors.find(t => String(t.id) === String(assignment.tutorId));
+  const preview = document.getElementById('manual-sg-preview');
+  if(!cls || !assignment || !tutor || !preview) return;
+  const day = document.getElementById('manual-sg-day')?.value || '';
+  const startTime = document.getElementById('manual-sg-start')?.value || '';
+  const errors = validateManualSGChoice(cls, assignment, tutor, day, startTime);
+  if(!day || !startTime){
+    preview.className = 'cet-assign-warning';
+    preview.innerHTML = 'Choose an available day and time.';
+    preview.style.display = 'block';
+  } else if(errors.length){
+    preview.className = 'cet-assign-warning';
+    preview.innerHTML = errors.map(error => `<div>${cetEsc(error)}</div>`).join('');
+    preview.style.display = 'block';
+  } else {
+    preview.className = 'cet-manual-sg-valid';
+    preview.innerHTML = `<i class="ti ti-circle-check"></i> ${cetEsc(day)}, ${cetEsc(fmtTime(startTime))}–${cetEsc(fmtTime(oneHourEndTime(startTime)))} is valid.`;
+    preview.style.display = 'block';
+  }
+}
+
+function openManualSGModal(classId, assignmentId){
+  normalizeAllCETClasses();
+  const cls = cetClasses.find(c => String(c.id) === String(classId));
+  const assignment = cls && (cls.assignments || []).find(a => String(a.id) === String(assignmentId));
+  const tutor = assignment && tutors.find(t => String(t.id) === String(assignment.tutorId));
+  if(!cls || !assignment || !tutor){ showToast('That CET tutor assignment could not be found.', 'warn'); return; }
+
+  closeManualSGModal();
+  const saved = assignment.sgPlacement || {};
+  const days = typeof activeScheduleDays === 'function' ? activeScheduleDays() : ALL_DAYS;
+  const selectedDay = days.includes(saved.day) ? saved.day : '';
+  const selectedStart = selectedDay && manualSGStartTimesForDay(selectedDay).includes(saved.startTime) ? saved.startTime : '';
+  const classTime = cls.modality === 'async'
+    ? 'Asynchronous class (no fixed meeting time)'
+    : `${(cls.days || []).join(', ') || 'Day TBD'} · ${cls.startTime && cls.endTime ? `${fmtTime(cls.startTime)}–${fmtTime(cls.endTime)}` : 'time TBD'}`;
+  const hoursNote = typeof semesterOperatingNote === 'function' ? semesterOperatingNote() : 'Choose a time inside operating hours.';
+
+  const ov = document.createElement('div');
+  ov.id = 'manual-sg-overlay';
+  ov.className = 'cet-modal-overlay';
+  ov.innerHTML = `<div class="cet-modal cet-manual-sg-modal" role="dialog" aria-modal="true" aria-labelledby="manual-sg-title">
+    <div class="cet-modal-header"><h3 id="manual-sg-title">Set study group time</h3><button class="cet-modal-close" onclick="closeManualSGModal()" aria-label="Close">&times;</button></div>
+    <div class="cet-modal-body">
+      <div class="cet-study-note" style="margin-top:0"><strong>${cetEsc(tutor.name)}</strong> · ${cetEsc(cls.title || 'CET class')}<br><span>${cetEsc(classTime)}</span></div>
+      <div class="cet-manual-sg-rules"><strong>Scheduling rules</strong><span>${cetEsc(hoursNote)}</span><span>The study group is exactly 1 hour, must be within operating hours, and cannot overlap the CET class or another responsibility.</span></div>
+      <div class="form-grid two" style="margin-top:14px">
+        <div class="fg"><span class="fl">Study group day</span><select id="manual-sg-day" onchange="updateManualSGTimeOptions(${JSON.stringify(cls.id)}, ${JSON.stringify(assignment.id)})"><option value="">— Select day —</option>${days.map(day => `<option value="${day}" ${day===selectedDay?'selected':''}>${day}</option>`).join('')}</select></div>
+        <div class="fg"><span class="fl">One-hour time</span><select id="manual-sg-start" onchange="updateManualSGPreview(${JSON.stringify(cls.id)}, ${JSON.stringify(assignment.id)})">${manualSGTimeOptions(selectedDay, selectedStart)}</select></div>
+      </div>
+      <div id="manual-sg-preview" class="cet-assign-warning" style="display:block"></div>
+    </div>
+    <div class="cet-modal-footer"><button class="btn" onclick="closeManualSGModal()">Cancel</button><button class="btn btn-red" onclick="saveManualSGPlacement(${JSON.stringify(cls.id)}, ${JSON.stringify(assignment.id)})"><i class="ti ti-check"></i> Save SG time</button></div>
+  </div>`;
+  document.body.appendChild(ov);
+  ov.addEventListener('click', event => { if(event.target === ov) closeManualSGModal(); });
+  updateManualSGPreview(cls.id, assignment.id);
+}
+
+function removeAssignmentSGFromCurrentSchedule(cls, assignment){
+  if(!Array.isArray(currentSlots)) return false;
+  let removed = false;
+  currentSlots.forEach(slot => {
+    if(!Array.isArray(slot.assigned)) return;
+    const before = slot.assigned.length;
+    slot.assigned = slot.assigned.filter(entry => !(entry && entry._type === 'sg'
+      && String(entry._sgClassId) === String(cls.id)
+      && String(entry._sgAssignmentId) === String(assignment.id)));
+    if(slot.assigned.length !== before) removed = true;
+  });
+  if(removed){
+    const tutor = tutors.find(t => String(t.id) === String(assignment.tutorId));
+    if(tutor) tutor.assignedHrs = Math.max(0, Number(tutor.assignedHrs || 0) - 1);
+  }
+  return removed;
+}
+
+function removeOrdinaryTutorCoverageForSG(tutor, day, startTime){
+  if(!Array.isArray(currentSlots) || !tutor) return 0;
+  const blockTimes = [startTime, minsToScheduleTime(timeToMins(startTime) + 30)];
+  let removedSlots = 0;
+  currentSlots.forEach(slot => {
+    if(slot.day !== day || !blockTimes.includes(slot.time) || !Array.isArray(slot.assigned)) return;
+    const before = slot.assigned.length;
+    slot.assigned = slot.assigned.filter(entry => !(String(entry.id) === String(tutor.id) && !entry._type));
+    if(slot.assigned.length !== before){
+      removedSlots++;
+      tutor.assignments = (tutor.assignments || []).filter(a => !(a.day === slot.day && a.time === slot.time));
+    }
+  });
+  if(removedSlots) tutor.assignedHrs = Math.max(0, Number(tutor.assignedHrs || 0) - removedSlots * 0.5);
+  return removedSlots;
+}
+
+function saveManualSGPlacement(classId, assignmentId){
+  normalizeAllCETClasses();
+  const cls = cetClasses.find(c => String(c.id) === String(classId));
+  const assignment = cls && (cls.assignments || []).find(a => String(a.id) === String(assignmentId));
+  const tutor = assignment && tutors.find(t => String(t.id) === String(assignment.tutorId));
+  if(!cls || !assignment || !tutor){ showToast('That CET tutor assignment could not be found.', 'warn'); return; }
+
+  const day = document.getElementById('manual-sg-day')?.value || '';
+  const startTime = document.getElementById('manual-sg-start')?.value || '';
+  const errors = validateManualSGChoice(cls, assignment, tutor, day, startTime);
+  if(errors.length){ showToast(errors[0], 'warn', 6000); updateManualSGPreview(classId, assignmentId); return; }
+
+  if(Array.isArray(currentSlots) && currentSlots.length){
+    if(typeof saveUndoState === 'function') saveUndoState('changed study group time');
+    removeAssignmentSGFromCurrentSchedule(cls, assignment);
+    removeOrdinaryTutorCoverageForSG(tutor, day, startTime);
+    placeStudyGroupBlock(tutor, cls, assignment, day, startTime, currentSlots, true);
+    renderOutput(currentSlots);
+    if(typeof updateScheduleStats === 'function') updateScheduleStats();
+  } else {
+    assignment.sgStatus = 'scheduled';
+    assignment.sgPlacement = {day, startTime, endTime:oneHourEndTime(startTime), weeklyHours:1, manual:true};
+    assignment.sgNote = 'Study group manually selected.';
+  }
+
+  closeManualSGModal();
+  renderCET();
+  showToast(`Study group saved for ${tutor.name}: ${day}, ${fmtTime(startTime)}–${fmtTime(oneHourEndTime(startTime))}.`, 'ok', 5500);
 }
 
 function removeCETAssignment(classId, assignmentId){
@@ -1992,7 +2187,9 @@ function normalizeCETClass(cls){
       ? {
           day:rawPlacement.day,
           startTime:/^\d{1,2}:\d{2}$/.test(String(rawPlacement.startTime || '')) ? String(rawPlacement.startTime) : '',
-          endTime:/^\d{1,2}:\d{2}$/.test(String(rawPlacement.endTime || '')) ? String(rawPlacement.endTime) : ''
+          endTime:/^\d{1,2}:\d{2}$/.test(String(rawPlacement.endTime || '')) ? String(rawPlacement.endTime) : '',
+          weeklyHours:1,
+          manual:rawPlacement.manual === true
         }
       : null;
     const requiresSG = cls.requiresStudyGroup !== false;
@@ -2005,7 +2202,7 @@ function normalizeCETClass(cls){
       weeklyHours: isAsync ? Number(a.weeklyHours ?? classContactHours(cls) ?? 0) : Number(a.weeklyHours ?? calcCETAssignmentHours(a) ?? 0),
       asyncCoursework: isAsync || !!a.asyncCoursework,
       note: cleanPlainText(a.note, 500),
-      sgStatus: requiresSG ? (sgPlacement ? 'scheduled' : (a.sgStatus || (isAsync ? 'manual-needed' : 'pending'))) : 'not-needed',
+      sgStatus: requiresSG ? (a.sgStatus || (sgPlacement ? 'scheduled' : (isAsync ? 'manual-needed' : 'pending'))) : 'not-needed',
       sgPlacement,
       sgNote: cleanPlainText(a.sgNote || (requiresSG ? (isAsync ? 'Asynchronous class: SG must be manually selected.' : '') : ''), 500)
     };
@@ -2026,9 +2223,12 @@ function resetCETStudyGroupStatus(){
   cetClasses.forEach(cls => {
     (cls.assignments || []).forEach(a => {
       if(assignmentNeedsStudyGroup(cls, a)){
-        if(cls.modality === 'async'){
+        if(a.sgPlacement && a.sgPlacement.manual === true){
+          a.sgStatus = 'pending';
+          a.sgNote = 'Saved manual study group will be checked during schedule generation.';
+        } else if(cls.modality === 'async'){
           a.sgStatus = a.sgPlacement ? 'scheduled' : 'manual-needed';
-          a.sgNote = a.sgPlacement ? 'Study group manually selected for this asynchronous class.' : 'Asynchronous class: SG must be manually selected.';
+          a.sgNote = a.sgPlacement ? 'Study group manually selected.' : 'Asynchronous class: SG must be manually selected.';
         } else {
           a.sgStatus = 'pending';
           a.sgPlacement = null;

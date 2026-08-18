@@ -136,7 +136,7 @@ function cetStudyGroupWarningBanner(){
   if(!unresolved.length) return '';
   const items = unresolved.map(({cls, assignment:a}) => {
     const tutor = getTutorById(a.tutorId);
-    return `<li><strong>${escapeHtml(tutor ? tutor.name : 'Tutor')}</strong> — ${escapeHtml(cls.title || 'CET class')}: ${escapeHtml(a.sgNote || 'Study group needs manual time.')}</li>`;
+    return `<li><strong>${escapeHtml(tutor ? tutor.name : 'Tutor')}</strong> — ${escapeHtml(cls.title || 'CET class')}: ${escapeHtml(a.sgNote || 'Study group needs manual time.')} <button class="btn btn-sm sg-warning-action" onclick="openManualSGModal(${JSON.stringify(cls.id)}, ${JSON.stringify(a.id)})"><i class="ti ti-calendar-plus"></i> Set SG time</button></li>`;
   }).join('');
   return `<div class="sg-warning-banner"><div><strong><i class="ti ti-alert-triangle"></i> Study groups needing manual time</strong><ul>${items}</ul></div></div>`;
 }
@@ -419,7 +419,10 @@ function generateSchedule(){
   }
 
   if(typeof resetCETStudyGroupStatus === 'function') resetCETStudyGroupStatus();
-  tutors.forEach(t=>{ t.assignedHrs=(typeof getCETHoursFor==='function'?getCETHoursFor(t.id):0); t.assignments=[]; });
+  // Start with CET class-attendance/coursework hours only. Each successfully
+  // placed study group adds its single hour below, so saved manual SG choices
+  // are not counted twice when a schedule is regenerated.
+  tutors.forEach(t=>{ t.assignedHrs=(typeof tutorCETHrs==='function'?tutorCETHrs(t):0); t.assignments=[]; });
 
   const allSlots=[];
   activeScheduleDays().forEach(day=>{
@@ -1333,7 +1336,7 @@ function placeStudyGroupBlock(tutor, cls, assignment, day, startTime, slots, isM
     weeklyHours: 1,
     manual: !!isManual
   };
-  assignment.sgNote = isManual ? 'Study group manually selected for this asynchronous class.' : 'Study group auto-placed before/after the full class meeting time.';
+  assignment.sgNote = isManual ? 'Study group manually selected.' : 'Study group auto-placed before/after the full class meeting time.';
   tutor.assignedHrs = Number(tutor.assignedHrs || 0) + 1;
 }
 
@@ -1352,6 +1355,24 @@ function autoPlaceCETStudyGroups(slots){
         a.sgPlacement = null;
         a.sgNote = 'Tutor was not found in the roster.';
         unresolved.push({cls, assignment:a});
+        return;
+      }
+
+      const savedManualPlacement = a.sgPlacement && a.sgPlacement.manual === true
+        ? a.sgPlacement
+        : null;
+
+      // A manual choice belongs to this exact tutor/class assignment and takes
+      // priority over automatic before/after placement on every regeneration.
+      if(savedManualPlacement && savedManualPlacement.day && savedManualPlacement.startTime){
+        if(isStudyGroupBlockValid(tutor, savedManualPlacement.day, savedManualPlacement.startTime, slots, cls, a)){
+          placeStudyGroupBlock(tutor, cls, a, savedManualPlacement.day, savedManualPlacement.startTime, slots, true);
+        } else {
+          a.sgStatus = 'manual-needed';
+          a.sgPlacement = savedManualPlacement;
+          a.sgNote = 'The selected study group time is no longer valid because it is outside operating hours, overlaps the class or another block, or the tutor is unavailable. Please choose a different time.';
+          unresolved.push({cls, assignment:a});
+        }
         return;
       }
 

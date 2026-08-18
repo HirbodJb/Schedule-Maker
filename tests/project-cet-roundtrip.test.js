@@ -60,10 +60,12 @@ cetClasses = [{
   section:'12345',status:'Regular',room:'Online Live',meetingDates:'08/31/2026 - 12/20/2026',
   requestNotes:'Requested tutor',sourceSchedule:'MoWe 9:00AM - 10:00AM',
   modality:'online-live',days:['Monday','Wednesday'],startTime:'9:00',endTime:'10:00',
-  hrsPerWeek:2,studyGroupMode:'none',requiresStudyGroup:false,wantsCET:true,
+  hrsPerWeek:2,studyGroupMode:'in-person',requiresStudyGroup:true,wantsCET:true,
   assignedTutorId:null,assignments:[{
     id:201,tutorId:1,days:['Monday'],startTime:'9:00',endTime:'10:00',weeklyHours:1,
-    asyncCoursework:false,note:'Assignment note',sgStatus:'not-needed',sgPlacement:null,sgNote:''
+    asyncCoursework:false,note:'Assignment note',sgStatus:'scheduled',
+    sgPlacement:{day:'Tuesday',startTime:'11:00',endTime:'12:00',weeklyHours:1,manual:true},
+    sgNote:'Study group manually selected.'
   }]
 }];
 
@@ -81,6 +83,9 @@ if(cetClasses.length !== 1) throw new Error('CET class did not restore');
 if(restored.requestNotes !== 'Requested tutor') throw new Error('CET notes did not restore');
 if(restored.assignments.length !== 1) throw new Error('CET assignment did not restore');
 if(restored.assignments[0].tutorId !== tutors[0].id) throw new Error('CET tutor link did not restore');
+if(restored.assignments[0].sgPlacement?.day !== 'Tuesday') throw new Error('Manual SG day did not restore');
+if(restored.assignments[0].sgPlacement?.startTime !== '11:00') throw new Error('Manual SG time did not restore');
+if(restored.assignments[0].sgPlacement?.manual !== true) throw new Error('Manual SG flag did not restore');
 console.log('Project CET round-trip passed: 1 tutor, 1 CET class, 1 CET assignment.');
 `;
 

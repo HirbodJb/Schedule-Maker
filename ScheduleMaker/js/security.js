@@ -92,7 +92,9 @@ function normalizeCETProjectState(source, tutorIdMap){
       const sgPlacement = placementDay ? {
         day:placementDay,
         startTime:validTime(placement.startTime),
-        endTime:validTime(placement.endTime)
+        endTime:validTime(placement.endTime),
+        weeklyHours:1,
+        manual:placement.manual === true
       } : null;
       return {
         id:safeRecordId(assignment.id, Date.now() + index * 1000 + assignmentIndex + 1),
